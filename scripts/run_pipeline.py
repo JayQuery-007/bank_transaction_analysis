@@ -12,10 +12,10 @@ import sys
 import time
 
 STEPS = [
-    ("Generating synthetic transactions", ["python", "data/generate_data.py"]),
-    ("Running Spark SQL ETL + feature engineering", ["python", "spark_jobs/etl_features.py"]),
-    ("Training Isolation Forest + scoring transactions", ["python", "ml/train_and_detect.py"]),
-    ("Loading results into MongoDB", ["python", "scripts/load_mongo.py"]),
+    ("Generating synthetic transactions", [sys.executable, "data/generate_data.py"]),
+    ("Running Spark SQL ETL + feature engineering", [sys.executable, "spark_jobs/etl_features.py"]),
+    ("Training Isolation Forest + scoring transactions", [sys.executable, "ml/train_and_detect.py"]),
+    ("Loading results into MongoDB", [sys.executable, "scripts/load_mongo.py"]),
 ]
 
 

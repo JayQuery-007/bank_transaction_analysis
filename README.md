@@ -35,46 +35,28 @@ transparently fall back to pandas / reading the pipeline's CSV+JSON output direc
 `backend/app/database.py::FileStore`), so the app still runs end to end. On this dev
 machine both Spark (via a local JDK) and a real MongoDB instance are wired up and used.
 
-## One-time setup
+## Quick start (any machine)
 
 ```bash
+git clone https://github.com/JayQuery-007/bank_transaction_analysis.git
+cd bank_transaction_analysis
 python -m venv venv
-venv\Scripts\pip install -r requirements.txt
+venv\Scripts\activate          # macOS/Linux: source venv/bin/activate
+pip install -r requirements.txt
+python run.py
 ```
 
-Java is required for the real Spark path. A portable JDK 17 is already extracted into
-`jdk/` in this project and `JAVA_HOME` has been set for your user profile — open a new
-terminal for it to take effect. MongoDB is running from the portable binaries in
-`mongodb/` (see "Running MongoDB" below).
+Then open **http://localhost:8000**. On the first run `run.py` builds everything
+(data generation -> Spark ETL -> model training -> MongoDB load), then starts the app.
+Later runs start instantly.
 
-## Running MongoDB
+Optional, auto-detected if present:
+- **Java 11/17** (`JAVA_HOME` set) -> the ETL runs on real Spark; otherwise it uses the pandas fallback with identical output.
+- **MongoDB** on `localhost:27017` (or set `MONGO_URI`) -> data is stored/served from MongoDB; otherwise the API reads the local CSV/JSON output.
 
-A portable (non-service) MongoDB is included under `mongodb/`. Start it with:
+The dashboard loads Chart.js from a CDN, so the browser needs internet access.
 
-```bash
-mongodb\mongodb-win32-x86_64-windows-8.0.4\bin\mongod.exe --dbpath mongodb\data --logpath mongodb\logs\mongod.log --port 27017
-```
-
-Leave it running in its own terminal (or as a background process). The API and
-`scripts/load_mongo.py` connect to `mongodb://localhost:27017` by default — override
-with the `MONGO_URI` environment variable if needed.
-
-## Running the pipeline
-
-Regenerates data, runs the Spark ETL, trains the model, and loads MongoDB - one command:
-
-```bash
-venv\Scripts\python scripts\run_pipeline.py
-```
-
-## Running the app
-
-```bash
-venv\Scripts\uvicorn backend.app.main:app --reload --port 8000
-```
-
-Open **http://localhost:8000** — the dashboard is served directly by FastAPI
-(no separate frontend build/server needed).
+To rebuild the data/model at any time: `python scripts/run_pipeline.py`.
 
 ## API endpoints
 
