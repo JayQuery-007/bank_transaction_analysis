@@ -1,3 +1,5 @@
 models/** -text
 *.jar binary
 *.parquet binary
+*.docx binary
+*.pdf binary
