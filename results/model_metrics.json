@@ -1,0 +1,39 @@
+[
+ {
+  "model": "Logistic Regression",
+  "precision": 0.0432,
+  "recall": 0.9094,
+  "f1": 0.0825,
+  "tp": 2189,
+  "fp": 48466,
+  "fn": 218,
+  "tn": 780564,
+  "train_seconds": 18.9,
+  "areaUnderROC": 0.9791,
+  "areaUnderPR": 0.5492
+ },
+ {
+  "model": "Random Forest",
+  "precision": 0.993,
+  "recall": 0.9975,
+  "f1": 0.9952,
+  "tp": 2401,
+  "fp": 17,
+  "fn": 6,
+  "tn": 829013,
+  "train_seconds": 94.0,
+  "areaUnderROC": 0.9993,
+  "areaUnderPR": 0.9978
+ },
+ {
+  "model": "Existing rule (isFlaggedFraud)",
+  "precision": 1.0,
+  "recall": 0.0017,
+  "f1": 0.0033,
+  "tp": 4,
+  "fp": 0,
+  "fn": 2403,
+  "tn": 829030,
+  "train_seconds": null
+ }
+]

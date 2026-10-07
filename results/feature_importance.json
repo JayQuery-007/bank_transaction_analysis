@@ -1,0 +1,38 @@
+[
+ {
+  "feature": "new_balance_orig",
+  "importance": 0.4001
+ },
+ {
+  "feature": "error_balance_orig",
+  "importance": 0.1946
+ },
+ {
+  "feature": "amount",
+  "importance": 0.1066
+ },
+ {
+  "feature": "is_transfer",
+  "importance": 0.0684
+ },
+ {
+  "feature": "hour_of_day",
+  "importance": 0.0596
+ },
+ {
+  "feature": "error_balance_dest",
+  "importance": 0.0503
+ },
+ {
+  "feature": "new_balance_dest",
+  "importance": 0.0429
+ },
+ {
+  "feature": "old_balance_orig",
+  "importance": 0.0392
+ },
+ {
+  "feature": "old_balance_dest",
+  "importance": 0.0382
+ }
+]

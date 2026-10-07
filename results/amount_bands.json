@@ -1,0 +1,37 @@
+[
+ {
+  "band": 1,
+  "legit": 783,
+  "fraud": 2
+ },
+ {
+  "band": 2,
+  "legit": 6960,
+  "fraud": 40
+ },
+ {
+  "band": 3,
+  "legit": 70820,
+  "fraud": 220
+ },
+ {
+  "band": 4,
+  "legit": 755842,
+  "fraud": 1429
+ },
+ {
+  "band": 5,
+  "legit": 1799990,
+  "fraud": 3800
+ },
+ {
+  "band": 6,
+  "legit": 122438,
+  "fraud": 2419
+ },
+ {
+  "band": 7,
+  "legit": 5363,
+  "fraud": 287
+ }
+]

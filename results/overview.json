@@ -1,0 +1,14 @@
+[
+ {
+  "transactions": 6362604,
+  "total_amount": 1144392944759.76,
+  "fraud_transactions": 8197,
+  "fraud_amount": 12056415427.84,
+  "fraud_rate_pct": 0.1288,
+  "flagged_by_existing_rule": 16,
+  "flagged_and_fraud": 16,
+  "origin_accounts": 6353291,
+  "destination_accounts": 2722359,
+  "days_covered": 31
+ }
+]

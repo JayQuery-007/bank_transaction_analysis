@@ -1,34 +1,60 @@
-import os
+from typing import Literal, Optional
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
-from .routes import anomalies, detect, stats, transactions
+from config import ROOT
 
-app = FastAPI(
-    title="Bank Transaction Anomaly Detection API",
-    description="Spark + MongoDB + ML pipeline for bank transaction fraud/anomaly analytics.",
-    version="1.0.0",
-)
+from . import predict, store
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app = FastAPI(title="Bank Transaction Analytics API")
 
-app.include_router(stats.router)
-app.include_router(transactions.router)
-app.include_router(anomalies.router)
-app.include_router(detect.router)
+RESULT_SETS = {
+    "overview", "data_quality", "type_summary", "hourly", "daily", "amount_bands",
+    "balance_patterns", "repeat_fraud_destinations", "model_metrics", "model_info",
+    "feature_importance", "threshold_curve",
+}
 
 
-@app.get("/api/health")
-def health():
-    return {"status": "ok"}
+@app.get("/api/source")
+def data_source():
+    return {"source": store.source()}
 
 
-FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "frontend")
-app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+@app.get("/api/results/{name}")
+def result_set(name: str):
+    if name not in RESULT_SETS:
+        raise HTTPException(404, f"Unknown result set '{name}'")
+    return store.get(name)
+
+
+@app.get("/api/flagged")
+def flagged_transactions(
+    outcome: Optional[Literal["true positive", "false positive", "missed fraud"]] = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=500),
+):
+    rows, total = store.flagged(outcome, skip, limit)
+    return {"items": rows, "total": total}
+
+
+class Transaction(BaseModel):
+    type: Literal["TRANSFER", "CASH_OUT"]
+    amount: float = Field(gt=0)
+    old_balance_orig: float = Field(ge=0)
+    new_balance_orig: float = Field(ge=0)
+    old_balance_dest: float = Field(ge=0)
+    new_balance_dest: float = Field(ge=0)
+    hour_of_day: int = Field(ge=0, le=23)
+
+
+@app.post("/api/predict")
+def predict_transaction(tx: Transaction):
+    try:
+        return predict.score(tx.model_dump())
+    except SystemExit as e:  # raised by get_spark() when Java is missing
+        raise HTTPException(503, str(e))
+
+
+app.mount("/", StaticFiles(directory=ROOT / "frontend", html=True), name="frontend")

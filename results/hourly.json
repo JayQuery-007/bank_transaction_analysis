@@ -1,0 +1,146 @@
+[
+ {
+  "hour_of_day": 0,
+  "transactions": 71587,
+  "fraud_transactions": 300,
+  "fraud_rate_pct": 0.419
+ },
+ {
+  "hour_of_day": 1,
+  "transactions": 27111,
+  "fraud_transactions": 358,
+  "fraud_rate_pct": 1.32
+ },
+ {
+  "hour_of_day": 2,
+  "transactions": 9017,
+  "fraud_transactions": 371,
+  "fraud_rate_pct": 4.114
+ },
+ {
+  "hour_of_day": 3,
+  "transactions": 2006,
+  "fraud_transactions": 325,
+  "fraud_rate_pct": 16.201
+ },
+ {
+  "hour_of_day": 4,
+  "transactions": 1241,
+  "fraud_transactions": 274,
+  "fraud_rate_pct": 22.079
+ },
+ {
+  "hour_of_day": 5,
+  "transactions": 1641,
+  "fraud_transactions": 366,
+  "fraud_rate_pct": 22.303
+ },
+ {
+  "hour_of_day": 6,
+  "transactions": 3419,
+  "fraud_transactions": 357,
+  "fraud_rate_pct": 10.442
+ },
+ {
+  "hour_of_day": 7,
+  "transactions": 8988,
+  "fraud_transactions": 328,
+  "fraud_rate_pct": 3.649
+ },
+ {
+  "hour_of_day": 8,
+  "transactions": 26915,
+  "fraud_transactions": 368,
+  "fraud_rate_pct": 1.367
+ },
+ {
+  "hour_of_day": 9,
+  "transactions": 283518,
+  "fraud_transactions": 341,
+  "fraud_rate_pct": 0.12
+ },
+ {
+  "hour_of_day": 10,
+  "transactions": 425725,
+  "fraud_transactions": 371,
+  "fraud_rate_pct": 0.087
+ },
+ {
+  "hour_of_day": 11,
+  "transactions": 445992,
+  "fraud_transactions": 324,
+  "fraud_rate_pct": 0.073
+ },
+ {
+  "hour_of_day": 12,
+  "transactions": 483418,
+  "fraud_transactions": 339,
+  "fraud_rate_pct": 0.07
+ },
+ {
+  "hour_of_day": 13,
+  "transactions": 468474,
+  "fraud_transactions": 346,
+  "fraud_rate_pct": 0.074
+ },
+ {
+  "hour_of_day": 14,
+  "transactions": 439653,
+  "fraud_transactions": 353,
+  "fraud_rate_pct": 0.08
+ },
+ {
+  "hour_of_day": 15,
+  "transactions": 416685,
+  "fraud_transactions": 340,
+  "fraud_rate_pct": 0.082
+ },
+ {
+  "hour_of_day": 16,
+  "transactions": 441612,
+  "fraud_transactions": 345,
+  "fraud_rate_pct": 0.078
+ },
+ {
+  "hour_of_day": 17,
+  "transactions": 439938,
+  "fraud_transactions": 350,
+  "fraud_rate_pct": 0.08
+ },
+ {
+  "hour_of_day": 18,
+  "transactions": 580509,
+  "fraud_transactions": 343,
+  "fraud_rate_pct": 0.059
+ },
+ {
+  "hour_of_day": 19,
+  "transactions": 647814,
+  "fraud_transactions": 342,
+  "fraud_rate_pct": 0.053
+ },
+ {
+  "hour_of_day": 20,
+  "transactions": 553727,
+  "fraud_transactions": 339,
+  "fraud_rate_pct": 0.061
+ },
+ {
+  "hour_of_day": 21,
+  "transactions": 247805,
+  "fraud_transactions": 346,
+  "fraud_rate_pct": 0.14
+ },
+ {
+  "hour_of_day": 22,
+  "transactions": 194553,
+  "fraud_transactions": 349,
+  "fraud_rate_pct": 0.179
+ },
+ {
+  "hour_of_day": 23,
+  "transactions": 141256,
+  "fraud_transactions": 322,
+  "fraud_rate_pct": 0.228
+ }
+]

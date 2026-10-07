@@ -1,0 +1,303 @@
+[
+ {
+  "name_dest": "C668046170",
+  "fraud_transactions": 2,
+  "total_amount": 10160088.68,
+  "first_step": 269,
+  "last_step": 686
+ },
+ {
+  "name_dest": "C1669818195",
+  "fraud_transactions": 2,
+  "total_amount": 8848239.99,
+  "first_step": 446,
+  "last_step": 571
+ },
+ {
+  "name_dest": "C1981613973",
+  "fraud_transactions": 2,
+  "total_amount": 7265501.67,
+  "first_step": 72,
+  "last_step": 88
+ },
+ {
+  "name_dest": "C1366192319",
+  "fraud_transactions": 2,
+  "total_amount": 7061799.65,
+  "first_step": 84,
+  "last_step": 344
+ },
+ {
+  "name_dest": "C964377943",
+  "fraud_transactions": 2,
+  "total_amount": 6014862.39,
+  "first_step": 300,
+  "last_step": 401
+ },
+ {
+  "name_dest": "C14138104",
+  "fraud_transactions": 2,
+  "total_amount": 4597314.28,
+  "first_step": 415,
+  "last_step": 436
+ },
+ {
+  "name_dest": "C1399829166",
+  "fraud_transactions": 2,
+  "total_amount": 3540009.28,
+  "first_step": 212,
+  "last_step": 314
+ },
+ {
+  "name_dest": "C643624257",
+  "fraud_transactions": 2,
+  "total_amount": 3071716.97,
+  "first_step": 250,
+  "last_step": 279
+ },
+ {
+  "name_dest": "C1013511446",
+  "fraud_transactions": 2,
+  "total_amount": 2994972.2,
+  "first_step": 9,
+  "last_step": 74
+ },
+ {
+  "name_dest": "C1601170327",
+  "fraud_transactions": 2,
+  "total_amount": 2842694.99,
+  "first_step": 148,
+  "last_step": 281
+ },
+ {
+  "name_dest": "C52390890",
+  "fraud_transactions": 2,
+  "total_amount": 2662695.58,
+  "first_step": 22,
+  "last_step": 83
+ },
+ {
+  "name_dest": "C104038589",
+  "fraud_transactions": 2,
+  "total_amount": 2202769.97,
+  "first_step": 39,
+  "last_step": 59
+ },
+ {
+  "name_dest": "C803116137",
+  "fraud_transactions": 2,
+  "total_amount": 1744765.69,
+  "first_step": 5,
+  "last_step": 36
+ },
+ {
+  "name_dest": "C904300960",
+  "fraud_transactions": 2,
+  "total_amount": 1427683.17,
+  "first_step": 6,
+  "last_step": 157
+ },
+ {
+  "name_dest": "C967226405",
+  "fraud_transactions": 2,
+  "total_amount": 1416085.46,
+  "first_step": 163,
+  "last_step": 254
+ },
+ {
+  "name_dest": "C385133759",
+  "fraud_transactions": 2,
+  "total_amount": 1396377.23,
+  "first_step": 214,
+  "last_step": 608
+ },
+ {
+  "name_dest": "C1259079602",
+  "fraud_transactions": 2,
+  "total_amount": 1214480.35,
+  "first_step": 44,
+  "last_step": 388
+ },
+ {
+  "name_dest": "C644163395",
+  "fraud_transactions": 2,
+  "total_amount": 1196176.06,
+  "first_step": 73,
+  "last_step": 105
+ },
+ {
+  "name_dest": "C1827800010",
+  "fraud_transactions": 2,
+  "total_amount": 1140481.06,
+  "first_step": 368,
+  "last_step": 724
+ },
+ {
+  "name_dest": "C185805228",
+  "fraud_transactions": 2,
+  "total_amount": 1124385.07,
+  "first_step": 16,
+  "last_step": 18
+ },
+ {
+  "name_dest": "C1653587362",
+  "fraud_transactions": 2,
+  "total_amount": 1059053.98,
+  "first_step": 281,
+  "last_step": 288
+ },
+ {
+  "name_dest": "C2129197098",
+  "fraud_transactions": 2,
+  "total_amount": 991012.48,
+  "first_step": 176,
+  "last_step": 262
+ },
+ {
+  "name_dest": "C1837027614",
+  "fraud_transactions": 2,
+  "total_amount": 951189.9,
+  "first_step": 377,
+  "last_step": 597
+ },
+ {
+  "name_dest": "C1827219533",
+  "fraud_transactions": 2,
+  "total_amount": 907503.17,
+  "first_step": 36,
+  "last_step": 95
+ },
+ {
+  "name_dest": "C1497532505",
+  "fraud_transactions": 2,
+  "total_amount": 744832.46,
+  "first_step": 195,
+  "last_step": 306
+ },
+ {
+  "name_dest": "C475338087",
+  "fraud_transactions": 2,
+  "total_amount": 730733.52,
+  "first_step": 71,
+  "last_step": 628
+ },
+ {
+  "name_dest": "C1780714769",
+  "fraud_transactions": 2,
+  "total_amount": 717835.16,
+  "first_step": 164,
+  "last_step": 600
+ },
+ {
+  "name_dest": "C686334805",
+  "fraud_transactions": 2,
+  "total_amount": 629142.78,
+  "first_step": 525,
+  "last_step": 621
+ },
+ {
+  "name_dest": "C2020337583",
+  "fraud_transactions": 2,
+  "total_amount": 579140.87,
+  "first_step": 10,
+  "last_step": 352
+ },
+ {
+  "name_dest": "C935310781",
+  "fraud_transactions": 2,
+  "total_amount": 544064.51,
+  "first_step": 35,
+  "last_step": 46
+ },
+ {
+  "name_dest": "C1656842502",
+  "fraud_transactions": 2,
+  "total_amount": 524000.74,
+  "first_step": 154,
+  "last_step": 537
+ },
+ {
+  "name_dest": "C105660024",
+  "fraud_transactions": 2,
+  "total_amount": 514468.67,
+  "first_step": 183,
+  "last_step": 294
+ },
+ {
+  "name_dest": "C1148781766",
+  "fraud_transactions": 2,
+  "total_amount": 499556.75,
+  "first_step": 376,
+  "last_step": 650
+ },
+ {
+  "name_dest": "C650699445",
+  "fraud_transactions": 2,
+  "total_amount": 408028.65,
+  "first_step": 229,
+  "last_step": 249
+ },
+ {
+  "name_dest": "C1193568854",
+  "fraud_transactions": 2,
+  "total_amount": 397486.01,
+  "first_step": 497,
+  "last_step": 736
+ },
+ {
+  "name_dest": "C1185292292",
+  "fraud_transactions": 2,
+  "total_amount": 225576.15,
+  "first_step": 225,
+  "last_step": 634
+ },
+ {
+  "name_dest": "C1655359478",
+  "fraud_transactions": 2,
+  "total_amount": 179543.43,
+  "first_step": 450,
+  "last_step": 560
+ },
+ {
+  "name_dest": "C505532836",
+  "fraud_transactions": 2,
+  "total_amount": 174238.21,
+  "first_step": 320,
+  "last_step": 428
+ },
+ {
+  "name_dest": "C1980653895",
+  "fraud_transactions": 2,
+  "total_amount": 134287.29,
+  "first_step": 398,
+  "last_step": 720
+ },
+ {
+  "name_dest": "C410033330",
+  "fraud_transactions": 2,
+  "total_amount": 133781.84,
+  "first_step": 4,
+  "last_step": 5
+ },
+ {
+  "name_dest": "C1650668671",
+  "fraud_transactions": 2,
+  "total_amount": 46972.83,
+  "first_step": 201,
+  "last_step": 568
+ },
+ {
+  "name_dest": "C1460854172",
+  "fraud_transactions": 2,
+  "total_amount": 38626.67,
+  "first_step": 255,
+  "last_step": 730
+ },
+ {
+  "name_dest": "C200064275",
+  "fraud_transactions": 2,
+  "total_amount": 8847.0,
+  "first_step": 12,
+  "last_step": 15
+ }
+]

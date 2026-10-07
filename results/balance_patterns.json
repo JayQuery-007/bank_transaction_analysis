@@ -1,0 +1,22 @@
+[
+ {
+  "class": "fraud",
+  "transactions": 8197,
+  "pct_origin_emptied": 97.74,
+  "pct_dest_balance_unchanged_zero": 49.65,
+  "pct_origin_balance_mismatch": 0.55,
+  "avg_amount": 1470832.67,
+  "median_amount": 442290.23,
+  "at_10m_cap": 287
+ },
+ {
+  "class": "legit",
+  "transactions": 2762196,
+  "pct_origin_emptied": 42.72,
+  "pct_dest_balance_unchanged_zero": 0.06,
+  "pct_origin_balance_mismatch": 90.58,
+  "avg_amount": 314115.5,
+  "median_amount": 171020.92,
+  "at_10m_cap": 2920
+ }
+]

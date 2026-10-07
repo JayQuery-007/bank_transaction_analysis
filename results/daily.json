@@ -1,0 +1,188 @@
+[
+ {
+  "day": 1,
+  "transactions": 574255,
+  "fraud_transactions": 271,
+  "total_amount": 92131865625.65
+ },
+ {
+  "day": 2,
+  "transactions": 455238,
+  "fraud_transactions": 309,
+  "total_amount": 71238642397.16
+ },
+ {
+  "day": 3,
+  "transactions": 1070,
+  "fraud_transactions": 310,
+  "total_amount": 447084472.63
+ },
+ {
+  "day": 4,
+  "transactions": 28240,
+  "fraud_transactions": 262,
+  "total_amount": 3830547360.59
+ },
+ {
+  "day": 5,
+  "transactions": 9789,
+  "fraud_transactions": 252,
+  "total_amount": 1325133839.05
+ },
+ {
+  "day": 6,
+  "transactions": 441005,
+  "fraud_transactions": 228,
+  "total_amount": 73409986368.34
+ },
+ {
+  "day": 7,
+  "transactions": 420583,
+  "fraud_transactions": 272,
+  "total_amount": 67070777584.77
+ },
+ {
+  "day": 8,
+  "transactions": 449637,
+  "fraud_transactions": 278,
+  "total_amount": 70030598500.48
+ },
+ {
+  "day": 9,
+  "transactions": 417918,
+  "fraud_transactions": 254,
+  "total_amount": 58067765398.42
+ },
+ {
+  "day": 10,
+  "transactions": 392945,
+  "fraud_transactions": 282,
+  "total_amount": 65190352177.02
+ },
+ {
+  "day": 11,
+  "transactions": 417858,
+  "fraud_transactions": 261,
+  "total_amount": 60328661711.6
+ },
+ {
+  "day": 12,
+  "transactions": 349775,
+  "fraud_transactions": 297,
+  "total_amount": 57988498474.36
+ },
+ {
+  "day": 13,
+  "transactions": 428583,
+  "fraud_transactions": 242,
+  "total_amount": 138673068091.95
+ },
+ {
+  "day": 14,
+  "transactions": 397876,
+  "fraud_transactions": 246,
+  "total_amount": 100037360294.78
+ },
+ {
+  "day": 15,
+  "transactions": 401282,
+  "fraud_transactions": 250,
+  "total_amount": 77472364656.07
+ },
+ {
+  "day": 16,
+  "transactions": 375594,
+  "fraud_transactions": 252,
+  "total_amount": 67890541472.4
+ },
+ {
+  "day": 17,
+  "transactions": 425765,
+  "fraud_transactions": 319,
+  "total_amount": 74250134002.8
+ },
+ {
+  "day": 18,
+  "transactions": 20997,
+  "fraud_transactions": 266,
+  "total_amount": 3711531300.35
+ },
+ {
+  "day": 19,
+  "transactions": 11300,
+  "fraud_transactions": 256,
+  "total_amount": 1936895543.14
+ },
+ {
+  "day": 20,
+  "transactions": 19727,
+  "fraud_transactions": 236,
+  "total_amount": 3596373218.52
+ },
+ {
+  "day": 21,
+  "transactions": 24593,
+  "fraud_transactions": 272,
+  "total_amount": 4840421321.64
+ },
+ {
+  "day": 22,
+  "transactions": 53437,
+  "fraud_transactions": 256,
+  "total_amount": 9515278618.26
+ },
+ {
+  "day": 23,
+  "transactions": 51012,
+  "fraud_transactions": 216,
+  "total_amount": 8194745997.95
+ },
+ {
+  "day": 24,
+  "transactions": 32708,
+  "fraud_transactions": 279,
+  "total_amount": 5243509370.05
+ },
+ {
+  "day": 25,
+  "transactions": 57852,
+  "fraud_transactions": 239,
+  "total_amount": 9177487327.86
+ },
+ {
+  "day": 26,
+  "transactions": 13884,
+  "fraud_transactions": 271,
+  "total_amount": 2228709706.33
+ },
+ {
+  "day": 27,
+  "transactions": 8576,
+  "fraud_transactions": 278,
+  "total_amount": 1756268796.76
+ },
+ {
+  "day": 28,
+  "transactions": 14660,
+  "fraud_transactions": 247,
+  "total_amount": 3006718037.76
+ },
+ {
+  "day": 29,
+  "transactions": 54890,
+  "fraud_transactions": 260,
+  "total_amount": 9357636452.07
+ },
+ {
+  "day": 30,
+  "transactions": 11286,
+  "fraud_transactions": 267,
+  "total_amount": 1995900406.17
+ },
+ {
+  "day": 31,
+  "transactions": 269,
+  "fraud_transactions": 269,
+  "total_amount": 448086234.84
+ }
+]

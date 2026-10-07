@@ -1,100 +1,131 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Bank Transaction Anomaly Detection</title>
-<link rel="stylesheet" href="style.css" />
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bank Transaction Analytics</title>
+<link rel="stylesheet" href="style.css">
+<script src="vendor/chart.umd.min.js"></script>
 </head>
 <body>
-<header class="topbar">
-  <div class="brand">
-    <span class="brand-icon">◆</span>
-    <div>
-      <h1>Bank Transaction Anomaly Detection</h1>
-      <p class="subtitle">Spark SQL ETL &middot; Isolation Forest ML &middot; MongoDB &middot; FastAPI</p>
-    </div>
-  </div>
-  <div class="engine-badges">
-    <span id="storageBadge" class="badge">storage: …</span>
-    <span id="refreshedBadge" class="badge">updated: …</span>
+
+<header>
+  <div class="wrap">
+    <h1>Bank Transaction Analytics &amp; Fraud Detection</h1>
+    <p class="meta">
+      Dataset: <a href="https://www.kaggle.com/datasets/ealaxi/paysim1" target="_blank" rel="noopener">PaySim mobile money transactions (Kaggle)</a>
+      &middot; Pipeline: Spark SQL + Spark MLlib &middot; Serving: MongoDB + FastAPI
+      &middot; Data source: <span id="source">…</span>
+    </p>
   </div>
 </header>
 
-<main>
-  <section class="kpi-grid" id="kpiGrid">
-    <div class="kpi-card"><div class="kpi-label">Total Transactions</div><div class="kpi-value" id="kpiTotal">–</div></div>
-    <div class="kpi-card danger"><div class="kpi-label">Flagged Anomalies</div><div class="kpi-value" id="kpiFraud">–</div></div>
-    <div class="kpi-card"><div class="kpi-label">Fraud Rate</div><div class="kpi-value" id="kpiRate">–</div></div>
-    <div class="kpi-card"><div class="kpi-label">Total Volume</div><div class="kpi-value" id="kpiVolume">–</div></div>
-    <div class="kpi-card accent"><div class="kpi-label">Model F1 Score</div><div class="kpi-value" id="kpiF1">–</div></div>
+<main class="wrap">
+
+  <section>
+    <h2>1. Dataset overview</h2>
+    <div class="stats" id="stats"></div>
+    <p class="note" id="qualityNote"></p>
   </section>
 
-  <section class="grid-2">
-    <div class="card">
-      <h2>Transactions &amp; Anomalies Over Time</h2>
-      <canvas id="timeSeriesChart" height="110"></canvas>
-    </div>
-    <div class="card">
-      <h2>Normal vs Anomalous</h2>
-      <canvas id="pieChart" height="110"></canvas>
+  <section>
+    <h2>2. Which transaction types are affected?</h2>
+    <p id="typeFinding"></p>
+    <div class="cols">
+      <div class="chart-box"><canvas id="typeChart"></canvas></div>
+      <table id="typeTable" class="data"></table>
     </div>
   </section>
 
-  <section class="grid-2">
-    <div class="card">
-      <h2>Transaction Volume by Category</h2>
-      <canvas id="categoryChart" height="130"></canvas>
+  <section>
+    <h2>3. When does fraud happen?</h2>
+    <p id="hourFinding"></p>
+    <div class="chart-box wide"><canvas id="hourChart"></canvas></div>
+  </section>
+
+  <section>
+    <h2>4. What do fraudulent transactions look like?</h2>
+    <p class="sub">TRANSFER and CASH_OUT transactions only.</p>
+    <div class="cols">
+      <div>
+        <h3>Transaction amount</h3>
+        <div class="chart-box"><canvas id="amountChart"></canvas></div>
+      </div>
+      <div>
+        <h3>Account balance behaviour</h3>
+        <table id="balanceTable" class="data"></table>
+        <p id="balanceFinding" class="note"></p>
+      </div>
     </div>
-    <div class="card">
-      <h2>Fraud Rate by Country</h2>
-      <canvas id="countryChart" height="130"></canvas>
+    <h3>Destination accounts receiving repeated fraud (possible mule accounts)</h3>
+    <p id="muleFinding" class="note"></p>
+    <table id="muleTable" class="data"></table>
+  </section>
+
+  <section>
+    <h2>5. Fraud detection model (Spark MLlib)</h2>
+    <p id="modelIntro"></p>
+    <table id="modelTable" class="data"></table>
+    <div class="cols">
+      <div>
+        <h3>Random Forest &ndash; confusion matrix (test set)</h3>
+        <table id="confusion" class="confusion"></table>
+        <h3>Feature importance</h3>
+        <div class="chart-box"><canvas id="featureChart"></canvas></div>
+      </div>
+      <div>
+        <h3>Precision / recall vs alert threshold</h3>
+        <div class="chart-box"><canvas id="thresholdChart"></canvas></div>
+        <p class="note">Lowering the threshold raises more alerts. The curve is nearly flat between 0.2 and 0.7, so the default 0.5 is a reasonable operating point.</p>
+      </div>
     </div>
   </section>
 
-  <section class="grid-2">
-    <div class="card">
-      <h2>Amount vs Anomaly Score</h2>
-      <canvas id="scatterChart" height="130"></canvas>
+  <section>
+    <h2>6. Flagged transactions (test set)</h2>
+    <div class="filters" id="filters">
+      <button data-outcome="" class="active">All</button>
+      <button data-outcome="true positive">True positives</button>
+      <button data-outcome="false positive">False positives</button>
+      <button data-outcome="missed fraud">Missed fraud</button>
+      <span id="flaggedCount" class="note"></span>
     </div>
-    <div class="card">
-      <h2>Live Transaction Risk Check</h2>
-      <form id="detectForm" class="detect-form">
-        <label>Amount ($)<input type="number" step="0.01" id="f_amount" value="450" required></label>
-        <label>Hour of day (0-23)<input type="number" min="0" max="23" id="f_hour" value="14" required></label>
-        <label>Account avg spend ($)<input type="number" step="0.01" id="f_avg" value="80" required></label>
-        <label>Account std dev ($)<input type="number" step="0.01" id="f_std" value="30"></label>
-        <label>Distinct countries used<input type="number" min="1" id="f_countries" value="1"></label>
-        <label>Seconds since last tx<input type="number" min="0" id="f_seconds" value="3600"></label>
-        <button type="submit">Score Transaction</button>
-      </form>
-      <div id="detectResult" class="detect-result"></div>
+    <div class="scroll">
+      <table id="flaggedTable" class="data small"></table>
+    </div>
+    <div class="pager">
+      <button id="prevPage">&larr; Previous</button>
+      <span id="pageInfo"></span>
+      <button id="nextPage">Next &rarr;</button>
     </div>
   </section>
 
-  <section class="card">
-    <div class="table-header">
-      <h2>Top Flagged Anomalies</h2>
-      <button id="refreshAnomalies" class="ghost-btn">Refresh</button>
+  <section>
+    <h2>7. Check a transaction</h2>
+    <p class="sub">Scores a single transaction with the trained Random Forest. The first request starts Spark and takes a few seconds.</p>
+    <div class="examples">
+      Fill with:
+      <button type="button" data-example="fraud">a fraud from the test set</button>
+      <button type="button" data-example="legit">a normal cash-out</button>
     </div>
-    <div class="table-wrap">
-      <table id="anomalyTable">
-        <thead>
-          <tr>
-            <th>Transaction ID</th><th>Account</th><th>Amount</th><th>Timestamp</th>
-            <th>Category</th><th>Country</th><th>Channel</th><th>Score</th><th>Pattern</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
+    <form id="predictForm" class="form">
+      <label>Type
+        <select name="type"><option>TRANSFER</option><option>CASH_OUT</option></select>
+      </label>
+      <label>Amount<input name="amount" type="number" step="0.01" min="0.01" required></label>
+      <label>Hour of day<input name="hour_of_day" type="number" min="0" max="23" required></label>
+      <label>Sender balance before<input name="old_balance_orig" type="number" step="0.01" min="0" required></label>
+      <label>Sender balance after<input name="new_balance_orig" type="number" step="0.01" min="0" required></label>
+      <label>Receiver balance before<input name="old_balance_dest" type="number" step="0.01" min="0" required></label>
+      <label>Receiver balance after<input name="new_balance_dest" type="number" step="0.01" min="0" required></label>
+      <button type="submit">Score transaction</button>
+    </form>
+    <div id="predictResult"></div>
   </section>
+
 </main>
 
-<footer>
-  Bank Transaction Analytics &amp; Anomaly Detection &mdash; Big Data Analytics course project
-</footer>
+<footer class="wrap">Big Data Analytics coursework &middot; Python, Apache Spark, MongoDB, Machine Learning</footer>
 
 <script src="app.js"></script>
 </body>

@@ -1,0 +1,13 @@
+[
+ {
+  "total_rows": 6362620,
+  "rows_with_nulls": 0,
+  "negative_amounts": 0,
+  "zero_amounts": 16,
+  "duplicate_rows": 0,
+  "distinct_origin_accounts": 6353307,
+  "distinct_destination_accounts": 2722362,
+  "rows_written": 6362604,
+  "seconds": 19.6
+ }
+]

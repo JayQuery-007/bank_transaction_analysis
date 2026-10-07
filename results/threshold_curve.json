@@ -1,0 +1,56 @@
+[
+ {
+  "threshold": 0.1,
+  "precision": 0.9864,
+  "recall": 0.9975,
+  "alerts": 2434
+ },
+ {
+  "threshold": 0.2,
+  "precision": 0.9917,
+  "recall": 0.9975,
+  "alerts": 2421
+ },
+ {
+  "threshold": 0.3,
+  "precision": 0.993,
+  "recall": 0.9975,
+  "alerts": 2418
+ },
+ {
+  "threshold": 0.4,
+  "precision": 0.993,
+  "recall": 0.9975,
+  "alerts": 2418
+ },
+ {
+  "threshold": 0.5,
+  "precision": 0.993,
+  "recall": 0.9975,
+  "alerts": 2418
+ },
+ {
+  "threshold": 0.6,
+  "precision": 0.993,
+  "recall": 0.9975,
+  "alerts": 2418
+ },
+ {
+  "threshold": 0.7,
+  "precision": 0.9938,
+  "recall": 0.9971,
+  "alerts": 2415
+ },
+ {
+  "threshold": 0.8,
+  "precision": 0.9942,
+  "recall": 0.9904,
+  "alerts": 2398
+ },
+ {
+  "threshold": 0.9,
+  "precision": 0.9957,
+  "recall": 0.9609,
+  "alerts": 2323
+ }
+]
