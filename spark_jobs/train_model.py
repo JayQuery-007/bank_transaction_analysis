@@ -36,6 +36,20 @@ FEATURES = [
 ]
 
 
+def shorten_part_files(model_dir):
+    """Rename Spark's part-00000-<uuid>-c000.snappy.parquet files to part-00000.parquet.
+
+    The long names push the model path past Windows' 260-character limit when the
+    repo is cloned into a deep folder. Spark reads every part file in a directory
+    regardless of name.
+    """
+    for crc in model_dir.rglob("*.crc"):
+        crc.unlink()
+    for folder in {p.parent for p in model_dir.rglob("part-*.parquet")}:
+        for i, part in enumerate(sorted(folder.glob("part-*.parquet"))):
+            part.rename(folder / f"part-{i:05d}.parquet")
+
+
 def load_training_data(spark):
     df = (
         spark.read.parquet(str(LAKE_DIR))
@@ -171,6 +185,7 @@ def main():
     publish("flagged_transactions", to_records(flagged))
 
     rf_model.write().overwrite().save(str(MODEL_DIR))
+    shorten_part_files(MODEL_DIR)
     print(f"Saved model to {MODEL_DIR}")
     spark.stop()
 
