@@ -7,6 +7,9 @@ fraud detection model with Spark MLlib, and serves the results from MongoDB to a
 **Stack:** Python + Apache Spark (Spark SQL, MLlib) + MongoDB + Machine Learning,
 with Parquet for storage and FastAPI for the dashboard API.
 
+**Live dashboard:** https://jayquery-007-bank-transaction-analytics.static.hf.space
+(hosted on [Hugging Face Spaces](https://huggingface.co/spaces/JayQuery-007/bank-transaction-analytics))
+
 ## Problem
 
 Banks and payment providers process millions of transactions a day, and only a tiny fraction
@@ -168,18 +171,21 @@ a local MongoDB from `.\mongodb\` (if present) and then the dashboard.
 
 ### Deployment (Hugging Face Spaces)
 
-The repo includes a `Dockerfile` that serves the dashboard and API (Python 3.11, Java 17
-for the Spark model). It doesn't run the pipeline: `results/` and `models/` are used as-is.
-To deploy to a free Hugging Face Space:
+The live dashboard is a **static** Hugging Face Space, which is free and needs no server.
+`deploy/build_static.py` copies the frontend and `results/*.json` into `site/` and exports
+the trained Random Forest's 60 trees from Spark's model files to JSON. `frontend/forest.js`
+then scores transactions in the browser with the same logic as Spark MLlib. The build
+checks the export against Spark's stored probabilities for all 2,424 scored test
+transactions, and it matches exactly.
 
 ```bash
-hf auth login                   # paste a Hugging Face token with write access
-python deploy/deploy_hf.py      # creates/updates the Space and uploads the app
+hf auth login                   # one-time, signs in to Hugging Face
+python deploy/deploy_hf.py      # builds site/ and uploads it to the Space
 ```
 
-Hugging Face builds the image and serves the app at
-`https://<username>-bank-transaction-analytics.hf.space`. The same Dockerfile works on any
-host that runs containers (Render, Railway, a VM) with about 2 GB of RAM.
+For a server-based deployment (FastAPI + Spark + MongoDB), the repo also has a
+`Dockerfile` (Python 3.11, Java 17, about 2 GB of RAM). It runs on any container host
+such as Render, Railway or a VM. Docker Spaces on Hugging Face need a paid plan.
 
 ### Running Spark on Windows
 

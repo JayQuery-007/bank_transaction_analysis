@@ -19,3 +19,6 @@ metastore_db/
 derby.log
 .env
 *.log
+
+# static build output (deploy/build_static.py)
+site/

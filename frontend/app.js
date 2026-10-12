@@ -20,6 +20,31 @@ async function api(path, options) {
   return res.json();
 }
 
+// Server mode reads the FastAPI backend; the static build (deploy/build_static.py)
+// reads the same result files directly and scores transactions in the browser.
+let flaggedCache = null;
+const data = window.STATIC_SITE
+  ? {
+      source: async () => "results/*.json (static build)",
+      result: (name) => api(`data/${name}.json`),
+      async flagged({ outcome, skip, limit }) {
+        flaggedCache = flaggedCache || (await api("data/flagged_transactions.json"));
+        const rows = outcome ? flaggedCache.filter((r) => r.outcome === outcome) : flaggedCache;
+        return { items: rows.slice(skip, skip + limit), total: rows.length };
+      },
+      predict: (tx) => scoreWithForest(tx),
+    }
+  : {
+      source: async () => (await api("/api/source")).source,
+      result: (name) => api(`/api/results/${name}`),
+      flagged({ outcome, skip, limit }) {
+        const q = new URLSearchParams({ skip, limit });
+        if (outcome) q.set("outcome", outcome);
+        return api(`/api/flagged?${q}`);
+      },
+      predict: (tx) => api("/api/predict", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(tx) }),
+    };
+
 function table(el, headers, rows) {
   el.innerHTML =
     "<thead><tr>" + headers.map((h) => `<th>${h}</th>`).join("") + "</tr></thead>" +
@@ -182,13 +207,11 @@ const flaggedState = { outcome: "", skip: 0, limit: 25, total: 0 };
 const OUTCOME_TAG = { "true positive": "tp", "false positive": "fp", "missed fraud": "fn" };
 
 async function loadFlagged() {
-  const q = new URLSearchParams({ skip: flaggedState.skip, limit: flaggedState.limit });
-  if (flaggedState.outcome) q.set("outcome", flaggedState.outcome);
-  const data = await api(`/api/flagged?${q}`);
-  flaggedState.total = data.total;
+  const res = await data.flagged(flaggedState);
+  flaggedState.total = res.total;
   table($("flaggedTable"),
     ["Day / hour", "Type", "Amount", "Sender", "Sender bal. before → after", "Receiver", "Receiver bal. before → after", "Fraud prob.", "Outcome"],
-    data.items.map((r) => ({
+    res.items.map((r) => ({
       cells: [
         `${r.day} / ${r.hour_of_day}:00`, r.type, num(r.amount, 2), esc(r.name_orig),
         `${num(r.old_balance_orig)} → ${num(r.new_balance_orig)}`, esc(r.name_dest),
@@ -197,9 +220,9 @@ async function loadFlagged() {
       ],
     })));
   const page = Math.floor(flaggedState.skip / flaggedState.limit) + 1;
-  const pages = Math.max(1, Math.ceil(data.total / flaggedState.limit));
+  const pages = Math.max(1, Math.ceil(res.total / flaggedState.limit));
   $("pageInfo").textContent = `Page ${page} of ${pages}`;
-  $("flaggedCount").textContent = `${num(data.total)} transactions`;
+  $("flaggedCount").textContent = `${num(res.total)} transactions`;
   $("prevPage").disabled = page <= 1;
   $("nextPage").disabled = page >= pages;
 }
@@ -219,8 +242,7 @@ const LEGIT_EXAMPLE = { type: "CASH_OUT", amount: 18500, hour_of_day: 14, old_ba
 async function fillExample(kind) {
   let tx = LEGIT_EXAMPLE;
   if (kind === "fraud") {
-    const data = await api("/api/flagged?outcome=true%20positive&limit=1&skip=40");
-    tx = data.items[0];
+    tx = (await data.flagged({ outcome: "true positive", skip: 40, limit: 1 })).items[0];
   }
   const form = $("predictForm");
   for (const key of Object.keys(LEGIT_EXAMPLE)) form.elements[key].value = tx[key];
@@ -235,7 +257,7 @@ $("predictForm").addEventListener("submit", async (e) => {
   const out = $("predictResult");
   out.innerHTML = `<div class="result">Scoring&hellip;</div>`;
   try {
-    const r = await api("/api/predict", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const r = await data.predict(body);
     out.innerHTML = `
       <div class="result ${r.is_fraud ? "fraud" : ""}">
         <strong>${r.is_fraud ? "Likely fraud" : "Looks legitimate"}</strong> &mdash; fraud probability ${r.fraud_probability.toFixed(3)}<br>
@@ -249,10 +271,16 @@ $("predictForm").addEventListener("submit", async (e) => {
 async function main() {
   const names = ["overview", "data_quality", "type_summary", "hourly", "amount_bands", "balance_patterns",
     "repeat_fraud_destinations", "model_metrics", "model_info", "feature_importance", "threshold_curve"];
-  const [src, ...results] = await Promise.all([api("/api/source"), ...names.map((n) => api(`/api/results/${n}`))]);
+  const [src, ...results] = await Promise.all([data.source(), ...names.map((n) => data.result(n))]);
   const r = Object.fromEntries(names.map((n, i) => [n, results[i]]));
 
-  $("source").textContent = src.source;
+  $("source").textContent = src;
+  if (window.STATIC_SITE) {
+    $("serving").textContent = "static site, Random Forest exported from Spark and run in the browser";
+    $("predictNote").textContent =
+      "Scores a single transaction with the trained Random Forest. Its 60 trees were exported from Spark MLlib " +
+      "and run here in your browser; they give the same probabilities as Spark.";
+  }
   renderOverview(r.overview[0], r.data_quality[0]);
   renderTypes(r.type_summary, r.overview[0]);
   renderHourly(r.hourly);

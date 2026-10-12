@@ -14,7 +14,7 @@
     <h1>Bank Transaction Analytics &amp; Fraud Detection</h1>
     <p class="meta">
       Dataset: <a href="https://www.kaggle.com/datasets/ealaxi/paysim1" target="_blank" rel="noopener">PaySim mobile money transactions (Kaggle)</a>
-      &middot; Pipeline: Spark SQL + Spark MLlib &middot; Serving: MongoDB + FastAPI
+      &middot; Pipeline: Spark SQL + Spark MLlib &middot; Serving: <span id="serving">MongoDB + FastAPI</span>
       &middot; Data source: <span id="source">…</span>
     </p>
   </div>
@@ -102,7 +102,7 @@
 
   <section>
     <h2>7. Check a transaction</h2>
-    <p class="sub">Scores a single transaction with the trained Random Forest. The first request starts Spark and takes a few seconds.</p>
+    <p class="sub" id="predictNote">Scores a single transaction with the trained Random Forest. The first request starts Spark and takes a few seconds.</p>
     <div class="examples">
       Fill with:
       <button type="button" data-example="fraud">a fraud from the test set</button>
@@ -127,6 +127,8 @@
 
 <footer class="wrap">Big Data Analytics coursework &middot; Python, Apache Spark, MongoDB, Machine Learning</footer>
 
+<script src="config.js"></script>
+<script src="forest.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
