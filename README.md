@@ -166,6 +166,21 @@ python run_pipeline.py
 Start MongoDB first if you want the results stored there. On Windows, `.\start.ps1` starts
 a local MongoDB from `.\mongodb\` (if present) and then the dashboard.
 
+### Deployment (Hugging Face Spaces)
+
+The repo includes a `Dockerfile` that serves the dashboard and API (Python 3.11, Java 17
+for the Spark model). It doesn't run the pipeline: `results/` and `models/` are used as-is.
+To deploy to a free Hugging Face Space:
+
+```bash
+hf auth login                   # paste a Hugging Face token with write access
+python deploy/deploy_hf.py      # creates/updates the Space and uploads the app
+```
+
+Hugging Face builds the image and serves the app at
+`https://<username>-bank-transaction-analytics.hf.space`. The same Dockerfile works on any
+host that runs containers (Render, Railway, a VM) with about 2 GB of RAM.
+
 ### Running Spark on Windows
 
 Spark's local file writes call Hadoop native helpers (`winutils.exe`, `hadoop.dll`) on

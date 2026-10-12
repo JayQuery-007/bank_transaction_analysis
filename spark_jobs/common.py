@@ -28,7 +28,7 @@ def get_spark(app_name):
     builder = (
         SparkSession.builder.appName(app_name)
         .master("local[*]")
-        .config("spark.driver.memory", "4g")
+        .config("spark.driver.memory", os.environ.get("SPARK_DRIVER_MEMORY", "4g"))
         .config("spark.sql.shuffle.partitions", "16")
         .config("spark.sql.execution.arrow.pyspark.enabled", "true")
         .config("spark.ui.showConsoleProgress", "false")

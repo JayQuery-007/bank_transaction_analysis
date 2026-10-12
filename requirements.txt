@@ -1,11 +1,7 @@
-pyspark==3.5.3
-pandas>=2.2
-numpy>=2.1
-pyarrow>=15
-setuptools
-pymongo>=4.9
-fastapi>=0.115
-uvicorn>=0.32
+-r requirements-app.txt
+
+# pipeline, notebook and deployment
 kagglehub>=0.3
 matplotlib>=3.8
 ipykernel>=6
+huggingface_hub>=0.25

@@ -1,0 +1,12 @@
+.git/
+venv/
+jdk/
+mongodb/
+data/raw/
+data/lake/
+notebooks/
+docs/
+spark_jobs/winfs/
+**/__pycache__/
+**/*.crc
+*.log

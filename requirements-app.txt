@@ -1,0 +1,9 @@
+# Packages needed to serve the dashboard and API (used by the Dockerfile).
+pyspark==3.5.3
+pandas>=2.2
+numpy>=2.1
+pyarrow>=15
+setuptools
+pymongo>=4.9
+fastapi>=0.115
+uvicorn>=0.32
