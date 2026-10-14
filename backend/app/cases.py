@@ -117,9 +117,22 @@ def create_case(body: CaseCreate, owner: str = Depends(db.current_owner)):
     return _public(doc)
 
 
+DATASET_PATTERN = r"^(all|paysim|[0-9a-f]{24})$"
+
+
+def _dataset_filter(dataset):
+    """Mongo condition for one dataset. Cases made before datasets existed have no field and are PaySim's."""
+    if dataset in (None, "all"):
+        return None
+    if dataset == "paysim":
+        return {"$or": [{"dataset": "paysim"}, {"dataset": {"$exists": False}}]}
+    return {"dataset": dataset}
+
+
 @router.get("")
 def list_cases(
     status: Optional[Status] = None,
+    dataset: Optional[str] = Query(None, pattern=DATASET_PATTERN, description="'paysim', an upload id, or 'all' (default)"),
     q: Optional[str] = Query(None, max_length=60, description="transaction id, account id or assignee"),
     sort: Literal["updated_at", "created_at", "priority"] = "updated_at",
     skip: int = Query(0, ge=0, le=10000),
@@ -127,14 +140,17 @@ def list_cases(
     owner: str = Depends(db.current_owner),
 ):
     cases = db.collection("cases")
-    query = {"owner": owner}
+    conditions = [{"owner": owner}]
     if status:
-        query["status"] = status
+        conditions.append({"status": status})
+    if _dataset_filter(dataset):
+        conditions.append(_dataset_filter(dataset))
     if q and q.strip():
         term = q.strip()
         pattern = {"$regex": re.escape(term), "$options": "i"}
-        query["$or"] = [{"tx.name_orig": pattern}, {"tx.name_dest": pattern}, {"assignee": pattern},
-                        {"notes.text": pattern}] + ([{"tx_id": int(term)}] if term.isdigit() else [])
+        conditions.append({"$or": [{"tx.name_orig": pattern}, {"tx.name_dest": pattern}, {"assignee": pattern},
+                                   {"notes.text": pattern}] + ([{"tx_id": int(term)}] if term.isdigit() else [])})
+    query = {"$and": conditions}
     cursor = cases.find(query)
     if sort == "priority":  # high first
         items = sorted(cursor, key=lambda c: ("high", "medium", "low").index(c["priority"]))
@@ -145,13 +161,14 @@ def list_cases(
 
 
 @router.get("/stats")
-def case_stats(owner: str = Depends(db.current_owner)):
+def case_stats(dataset: Optional[str] = Query(None, pattern=DATASET_PATTERN), owner: str = Depends(db.current_owner)):
     counts = {s: 0 for s in STATUSES}
-    for row in db.collection("cases").aggregate([{"$match": {"owner": owner}},
-                                                 {"$group": {"_id": "$status", "n": {"$sum": 1}}}]):
+    match = {"$and": [{"owner": owner}] + ([_dataset_filter(dataset)] if _dataset_filter(dataset) else [])}
+    for row in db.collection("cases").aggregate([{"$match": match}, {"$group": {"_id": "$status", "n": {"$sum": 1}}}]):
         counts[row["_id"]] = row["n"]
+    total_all = db.collection("cases").count_documents({"owner": owner})  # the cap counts every dataset
     return {"by_status": counts, "total": sum(counts.values()), "open": counts["new"] + counts["investigating"],
-            "limit": MAX_CASES_PER_OWNER}
+            "limit": MAX_CASES_PER_OWNER, "total_all_datasets": total_all}
 
 
 @router.get("/{case_id}")

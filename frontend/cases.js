@@ -4,7 +4,8 @@
 (() => {
   const STATUS_LABEL = { new: "New", investigating: "Investigating", confirmed_fraud: "Confirmed fraud", false_positive: "False positive", closed: "Closed" };
   const STATUSES = Object.keys(STATUS_LABEL);
-  const state = { skip: 0, limit: 15, total: 0, items: [], selected: null, status: "" };
+  const state = { skip: 0, limit: 15, total: 0, items: [], selected: null, status: "", all: false };
+  const scope = () => (state.all ? "all" : datasets.current.id);
   let searchTimer = null;
 
   const badge = (s) => `<span class="badge s-${s}">${STATUS_LABEL[s]}</span>`;
@@ -14,31 +15,33 @@
 
   // ---- stats cards (click to filter) ----
   async function loadStats() {
-    const s = await apiAs("/api/cases/stats");
+    const s = await apiAs(`/api/cases/stats?${new URLSearchParams({ dataset: scope() })}`);
     $("caseStats").innerHTML = STATUSES.map((k) =>
       `<button type="button" class="stat ${state.status === k ? "active" : ""}" data-status="${k}">` +
       `<div class="label">${STATUS_LABEL[k]}</div><div class="value">${s.by_status[k]}</div></button>`).join("");
-    $("caseCount").textContent = `${s.total} of ${s.limit} cases used`;
+    $("caseCount").textContent = `${s.total_all_datasets} of ${s.limit} cases used`;
+    $("caseScope").textContent = state.all ? "Showing the cases of all your datasets."
+      : `Showing the cases of ${datasets.current.name}. Tick "all datasets" to see every case.`;
   }
 
   // ---- list ----
   async function loadList(skip = 0) {
     state.skip = skip;
-    const q = new URLSearchParams({ skip, limit: state.limit, sort: $("caseSort").value });
+    const q = new URLSearchParams({ skip, limit: state.limit, sort: $("caseSort").value, dataset: scope() });
     if (state.status) q.set("status", state.status);
     if ($("caseQuery").value.trim()) q.set("q", $("caseQuery").value.trim());
     const res = await apiAs(`/api/cases?${q}`);
     state.items = res.items;
     state.total = res.total;
-    table($("caseTable"), ["Case", "Transaction", "Accounts", "Score", "Status", "Priority", "Assignee", "Notes", "Updated"],
+    table($("caseTable"), ["Case", "Dataset", "Transaction", "Accounts", "Score", "Status", "Priority", "Assignee", "Notes", "Updated"],
       res.items.map((c) => ({
         cls: "clickable" + (state.selected === c.id ? " selected" : ""),
-        cells: [c.id.slice(-6), `#${c.tx_id} ${c.tx.type} ${num(c.tx.amount)}`, `${esc(c.tx.name_orig)} → ${esc(c.tx.name_dest)}`,
+        cells: [c.id.slice(-6), esc(c.dataset_name || "PaySim"), `#${c.tx_id} ${c.tx.type} ${num(c.tx.amount)}`, `${esc(c.tx.name_orig)} → ${esc(c.tx.name_dest)}`,
           score(c.tx), badge(c.status), prio(c.priority), esc(c.assignee) || "–", c.notes.length, time(c.updated_at)],
       })));
     document.querySelectorAll("#caseTable tbody tr").forEach((tr, i) => (tr.dataset.i = i));
     if (!res.items.length) $("caseTable").insertAdjacentHTML("beforeend",
-      `<tbody><tr><td colspan="9" class="empty">No cases yet. Open one from the Explorer or enter a transaction id above.</td></tr></tbody>`);
+      `<tbody><tr><td colspan="10" class="empty">No cases yet. Open one from the Explorer or enter a transaction id above.</td></tr></tbody>`);
     const page = Math.floor(skip / state.limit) + 1;
     $("casePager").hidden = res.total <= state.limit;
     $("casePageInfo").textContent = `Page ${page} of ${Math.max(1, Math.ceil(res.total / state.limit))}`;
@@ -65,6 +68,7 @@
       <div class="card" id="caseCard">
         <h3>Case ${c.id.slice(-6)} &middot; transaction #${c.tx_id} ${badge(c.status)}</h3>
         <dl class="kv">
+          <dt>Dataset</dt><dd>${esc(c.dataset_name || "PaySim")}</dd>
           <dt>Transaction</dt><dd>${esc(tx.type)}, ${num(tx.amount, 2)} on day ${tx.day} at ${String(tx.hour_of_day).padStart(2, "0")}:00</dd>
           <dt>Sender</dt><dd>${esc(tx.name_orig)}: ${num(tx.old_balance_orig, 2)} → ${num(tx.new_balance_orig, 2)}</dd>
           <dt>Receiver</dt><dd>${esc(tx.name_dest)}: ${num(tx.old_balance_dest, 2)} → ${num(tx.new_balance_dest, 2)}</dd>
@@ -145,7 +149,7 @@
   // ---- create ----
   async function create(body) {
     try {
-      const c = await apiAs("/api/cases", { method: "POST", body: JSON.stringify(body) });
+      const c = await apiAs("/api/cases", { method: "POST", body: JSON.stringify({ dataset: datasets.current.id, ...body }) });
       toast(`Case opened for transaction #${c.tx_id}`, "ok", { label: "View case", run: () => { location.hash = "cases"; showView("cases"); open(c.id); } });
       if (shown.has("cases")) await refresh();
       return c;
@@ -195,5 +199,19 @@
     container.appendChild(button);
   });
 
-  views.cases = { show: refresh };
+  function updateOpenLabel() {
+    $("caseOpenLabel").textContent = datasets.isUpload()
+      ? `Open a case for row number in ${datasets.current.name}` : "Open a case for transaction id";
+  }
+
+  $("caseAllDatasets").addEventListener("change", (e) => { state.all = e.target.checked; state.selected = null; $("caseDetail").innerHTML = ""; refresh(); });
+  window.addEventListener("datasetchange", () => {
+    state.selected = null;
+    state.skip = 0;
+    $("caseDetail").innerHTML = "";
+    updateOpenLabel();
+    if (shown.has("cases")) refresh();
+  });
+
+  views.cases = { show() { updateOpenLabel(); return refresh(); } };
 })();

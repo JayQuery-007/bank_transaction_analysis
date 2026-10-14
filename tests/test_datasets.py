@@ -251,3 +251,31 @@ def test_a_large_upload_is_searchable_and_summarised(client, owner):
     assert found["total"] == 1 and found["items"][0]["model_flag"] is True and found["took_ms"] < 100
     a = client.get(f"/api/datasets/{batch['id']}/overview", headers=h(owner)).json()["analytics"]
     assert a["overview"]["transactions"] == 300_000 and a["overview"]["flagged"] == batch["flagged"] == 7500
+
+
+def test_cases_can_be_filtered_by_dataset(client, owner, uploaded):
+    row = find(client, owner, uploaded, flagged=True, limit=1)["items"][0]
+    mine = client.post("/api/cases", json={"tx_id": row["tx_id"], "dataset": uploaded["id"]}, headers=h(owner)).json()
+    paysim = client.post("/api/cases", json={"tx_id": 425}, headers=h(owner)).json()
+    ids = lambda **p: {c["id"] for c in client.get("/api/cases", params=p, headers=h(owner)).json()["items"]}
+    assert ids() == ids(dataset="all") == {mine["id"], paysim["id"]}
+    assert ids(dataset=uploaded["id"]) == {mine["id"]} and ids(dataset="paysim") == {paysim["id"]}
+    stats = client.get("/api/cases/stats", params={"dataset": uploaded["id"]}, headers=h(owner)).json()
+    assert stats["total"] == 1 and stats["total_all_datasets"] == 2
+    assert client.get("/api/cases/stats", params={"dataset": "paysim"}, headers=h(owner)).json()["total"] == 1
+    assert client.get("/api/cases", params={"dataset": "nonsense"}, headers=h(owner)).status_code == 422
+    # filters combine: a search inside one dataset
+    assert ids(dataset=uploaded["id"], q=row["name_orig"]) == {mine["id"]} and ids(dataset="paysim", q=row["name_orig"]) == set()
+
+
+def test_cases_made_before_datasets_existed_belong_to_paysim(client, owner):
+    from bson import ObjectId
+
+    cases = db.collection("cases")
+    oid = ObjectId()
+    now = uploads._now()
+    cases.insert_one({"_id": oid, "owner": owner, "tx_ref": "dataset:7", "tx_id": 7, "tx": {"name_orig": "C1", "name_dest": "C2"},
+                      "status": "new", "is_open": True, "priority": "low", "assignee": "", "notes": [], "history": [],
+                      "created_at": now, "updated_at": now})
+    listed = client.get("/api/cases", params={"dataset": "paysim"}, headers=h(owner)).json()["items"]
+    assert [c["id"] for c in listed] == [str(oid)]

@@ -158,6 +158,20 @@ Measured on a 16 GB Windows laptop, uploading real PaySim rows through the web p
 | `paysim_sample_2_2000000_rows.csv` | 2,000,000 | 151 MB | 8.5 s | 1,356 | 98.8% / 99.6% |
 | `paysim_sample_3_3000000_rows.csv` | 3,003,305 | 226 MB | 12.5 s | 3,831 | 99.5% / 99.7% |
 
+Those times are for scoring. Right after scoring, a second phase builds a DuckDB search index
+for the file (13.8 s for the 3-million-row file, so about 25 s in total before it is explorable).
+
+### Datasets: explore, analyse and open cases on your upload
+
+The dataset picker at the top of the page chooses what the Overview, Explorer and Cases tabs work
+on: the PaySim data or any of your finished uploads. A finished upload is selected automatically.
+Each upload gets its own search index (`/api/search?dataset=<id>`), its own overview computed with
+SQL (`GET /api/datasets/{id}/overview`: type table, flag rate by hour, amount bands, score
+histogram, accuracy if the file has `isFraud`, top flagged receivers), and cases can be opened from
+its rows (the "transaction id" of an upload is the row number). Cases remember their dataset; the
+Cases tab shows the selected dataset's cases, or all of them with the "all datasets" tick.
+Uploads, their indexes and their cases expire like before (uploads after 24 hours).
+
 That is about 260,000 rows per second, and the server's memory peaked at 534 MB (154 MB idle)
 for all three. Scoring itself is fast because rows are scored in 25,000-row blocks on several
 threads: 426,000 rows/s, against 38,000 rows/s when the same rows are scored as one big array.
@@ -344,10 +358,11 @@ backend/app/
   forest.py               Spark's Random Forest evaluated with numpy
   search.py               /api/search, /api/transactions, /api/accounts
   cases.py, uploads.py    CRUD on cases, CSV upload and scoring
+  datasets.py             dataset picker list and per-upload overview
   db.py                   MongoDB connection, indexes, anonymous workspace id
   store.py                results from MongoDB or results/*.json
-frontend/                 dashboard (HTML, CSS, Chart.js): app.js, explorer.js, cases.js, upload.js, forest.js
-tests/                    pytest suite (over 110 tests)
+frontend/                 dashboard (HTML, CSS, Chart.js): app.js, datasets.js, overview_upload.js, explorer.js, cases.js, upload.js, forest.js
+tests/                    pytest suite (over 130 tests)
 deploy/                   static site build + upload, Docker Space deploy script
 models/fraud_rf/          trained Random Forest (Spark ML format)
 results/                  pipeline output (also loaded into MongoDB), sample upload file

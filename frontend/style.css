@@ -158,3 +158,11 @@ ul.errors { margin: 4px 0 0; padding-left: 18px; font-size: 13px; color: var(--m
 /* upload progress */
 .bar { display: inline-block; width: 220px; height: 8px; border-radius: 4px; background: #dbe3ec; vertical-align: middle; margin-left: 8px; overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--accent); transition: width .3s; }
+
+/* dataset picker */
+.tabs { align-items: center; }
+.dataset-picker { margin-left: auto; font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; padding-right: 2px; }
+.dataset-picker select { font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--text); background: var(--bg); max-width: 320px; }
+.dataset-banner { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; padding: 10px 14px; margin: 14px 0 0; border: 1px solid #bcd3ee; background: #eaf1f8; border-radius: 6px; font-size: 13.5px; }
+
+label.check { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--muted); }

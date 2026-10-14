@@ -1,5 +1,5 @@
 // Upload tab: send a CSV to /api/uploads, show the scored result, keep a history (server mode only).
-// Depends on helpers from app.js: $, apiAs, ownerId, num, esc, table, toast, views.
+// Depends on helpers from app.js: $, apiAs, ownerId, num, esc, table, toast, views, and on datasets.js.
 
 (() => {
   const state = { current: null, page: 0, pageSize: 15, maxBytes: 500 * 1024 * 1024, maxRows: 5000000, tracking: null };
@@ -41,9 +41,10 @@
       if (state.tracking !== token) return; // another upload or view took over
       if (b.status === "processing") {
         const pctDone = Math.round((b.progress || 0) * 100);
-        status(`Scoring <b>${esc(b.filename)}</b>: <b>${pctDone}%</b> ` +
-          `(${num(b.rows_processed)} of about ${num(b.rows_estimated)} rows) ` +
-          `<span class="bar"><i style="width:${pctDone}%"></i></span>`);
+        const doing = b.phase === "indexing"
+          ? `Building the search index for <b>${esc(b.filename)}</b>, so you can explore it`
+          : `Scoring <b>${esc(b.filename)}</b>: <b>${pctDone}%</b> (${num(b.rows_processed)} of about ${num(b.rows_estimated)} rows)`;
+        status(`${doing} <span class="bar"><i style="width:${pctDone}%"></i></span>`);
         await new Promise((r) => setTimeout(r, 450));
         continue;
       }
@@ -51,7 +52,8 @@
       loadList();
       if (b.status === "failed") return status(`Could not process ${esc(b.filename)}: ${esc(b.error)}`, true);
       render(b);
-      toast(`${num(b.rows_valid)} rows scored, ${num(b.flagged)} flagged`);
+      await refreshDatasets(b.id); // the new file is now the dataset the other tabs work on
+      toast(`${num(b.rows_valid)} rows scored, ${num(b.flagged)} flagged. Explorer, Overview and Cases now show this file.`);
       return;
     }
   }
@@ -97,7 +99,9 @@
         <div class="result-head">
           <h3 style="margin:0">${esc(b.filename)} <span class="note">${num(b.rows_total)} rows scored in ${(b.processing_ms / 1000).toFixed(b.processing_ms < 10000 ? 2 : 1)} s (${num(b.rows_per_second)} rows/s)</span></h3>
           <div>
-            <button type="button" id="dlScored" class="primary" ${b.download_available ? "" : "disabled title='expired after 24 hours'"}>Download scored CSV</button>
+            <button type="button" id="exploreUpload" class="primary" ${b.download_available ? "" : "disabled title='expired after 24 hours'"}>Explore this file</button>
+            <button type="button" id="overviewUpload2" ${b.download_available ? "" : "disabled"}>Overview</button>
+            <button type="button" id="dlScored" ${b.download_available ? "" : "disabled title='expired after 24 hours'"}>Download scored CSV</button>
             <button type="button" id="delUpload" class="danger">Delete upload</button>
           </div>
         </div>
@@ -107,6 +111,8 @@
         <div class="scroll"><table id="flaggedUploadTable" class="data small"></table></div>
         <div class="pager" id="uploadPager"><button id="upPrev">&larr; Previous</button><span id="upInfo"></span><button id="upNext">Next &rarr;</button></div>
       </div>`;
+    $("exploreUpload").onclick = () => { selectDataset(b.id); location.hash = "explorer"; };
+    $("overviewUpload2").onclick = () => { selectDataset(b.id); location.hash = "overview"; };
     $("dlScored").onclick = () => download(b);
     $("delUpload").onclick = () => confirmDelete(b);
     $("upPrev").onclick = () => { state.page -= 1; renderFlagged(); };
@@ -161,6 +167,7 @@
         $("uploadResult").innerHTML = "";
         toast("Upload deleted");
         loadList();
+        refreshDatasets();
       } catch (err) {
         toast(err.message, "error");
       }
@@ -180,7 +187,7 @@
           cells: [esc(b.filename), sizeText(b.size_bytes), time(b.created_at), rowsText(b),
             b.status === "done" ? num(b.flagged) : b.status === "failed" ? '<span class="badge fraud">failed</span>' : "…",
             b.metrics ? `${pct(b.metrics.precision)} / ${pct(b.metrics.recall)}` : "–",
-            `<button type="button" data-view-id="${b.id}" ${b.status === "failed" ? "disabled" : ""}>View</button> <button type="button" data-dl-id="${b.id}" ${b.download_available ? "" : "disabled"}>Download</button> <button type="button" data-del-id="${b.id}" class="danger">Delete</button>`],
+            `<button type="button" data-explore-id="${b.id}" ${b.status === "done" && b.download_available ? "" : "disabled"}>Explore</button> <button type="button" data-view-id="${b.id}" ${b.status === "failed" ? "disabled" : ""}>Summary</button> <button type="button" data-dl-id="${b.id}" ${b.download_available ? "" : "disabled"}>Download</button> <button type="button" data-del-id="${b.id}" class="danger">Delete</button>`],
         })));
       if (!items.length) $("uploadTable").insertAdjacentHTML("beforeend", `<tbody><tr><td colspan="7" class="empty">No uploads yet. You can keep up to ${limit}.</td></tr></tbody>`);
       state.items = items;
@@ -190,8 +197,9 @@
   }
 
   $("uploadTable").addEventListener("click", async (e) => {
-    const view = e.target.dataset.viewId, dl = e.target.dataset.dlId, del = e.target.dataset.delId;
+    const view = e.target.dataset.viewId, dl = e.target.dataset.dlId, del = e.target.dataset.delId, explore = e.target.dataset.exploreId;
     try {
+      if (explore) { selectDataset(explore); location.hash = "explorer"; return; }
       if (view) { await track(view); $("uploadStatus").scrollIntoView({ behavior: "smooth", block: "start" }); }
       if (dl) download(state.items.find((b) => b.id === dl));
       if (del) {
@@ -199,6 +207,7 @@
         if (state.current && state.current.id === del) { state.current = null; $("uploadResult").innerHTML = ""; }
         toast("Upload deleted");
         loadList();
+        refreshDatasets();
       }
     } catch (err) {
       toast(err.message, "error");

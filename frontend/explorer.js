@@ -1,5 +1,5 @@
 // Explorer tab: search the full transaction table through /api/search (server mode only).
-// Depends on helpers from app.js: $, api, num, esc, table, data, COLORS.
+// Depends on helpers from app.js: $, api, num, esc, table, data, COLORS, and on datasets.js (the selected dataset).
 
 window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the detail card: (row, container) => void
 
@@ -9,9 +9,12 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
   let exampleClicks = 0;
 
   const latency = (v) => (v >= 100 ? Math.round(v) : v.toFixed(1)) + " ms";
-  const when = (r) => `day ${r.day}, ${String(r.hour_of_day).padStart(2, "0")}:00`;
+  const hh = (r) => `${String(r.hour_of_day).padStart(2, "0")}:00`;
+  const when = (r) => (r.day === null || r.day === undefined ? hh(r) : `day ${r.day}, ${hh(r)}`);
   const acct = (id) => `<a href="#explorer" class="acct" data-account="${esc(id)}">${esc(id)}</a>`;
-  const label = (r) => (r.is_fraud ? '<span class="badge fraud">fraud</span>' : '<span class="badge ok">legit</span>');
+  const label = (r) => (r.is_fraud === null || r.is_fraud === undefined
+    ? '<span class="badge" title="The file has no isFraud column">no label</span>'
+    : r.is_fraud ? '<span class="badge fraud">fraud</span>' : '<span class="badge ok">legit</span>');
 
   function risk(r) {
     if (r.fraud_probability === null) return '<span class="badge" title="The model was trained on TRANSFER and CASH_OUT only">not modelled</span>';
@@ -22,6 +25,7 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
   function queryString(skip) {
     const q = new URLSearchParams({ skip, limit: state.limit });
     for (const [k, v] of Object.entries(state.query)) q.set(k, v);
+    datasets.withDataset(q);
     return q.toString();
   }
 
@@ -51,7 +55,7 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
     $("txDetail").innerHTML = "";
     status("Searching&hellip;");
     try {
-      const res = await api(`/api/search?${queryString(skip)}`);
+      const res = await datasets.call(`/api/search?${queryString(skip)}`);
       state.rows = res.items;
       state.total = res.total;
       render(res);
@@ -96,7 +100,7 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
     const id = state.query.account;
     if (!id) return;
     try {
-      const a = await api(`/api/accounts/${encodeURIComponent(id)}`);
+      const a = await datasets.call(`/api/accounts/${encodeURIComponent(id)}?${datasets.withDataset(new URLSearchParams())}`);
       const side = (s, verb) => (s.transactions
         ? `${verb} <b>${num(s.transactions)}</b> (${num(s.total_amount, 2)}${s.fraud_labelled ? `, <b>${s.fraud_labelled}</b> labelled fraud` : ""})`
         : `${verb} none`);
@@ -104,7 +108,7 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
         `${side(a.as_sender, "sent")} &middot; ${side(a.as_receiver, "received")} ` +
         `<span class="note">(${latency(a.took_ms)})</span></div>`;
     } catch (err) {
-      card.innerHTML = `<div class="card note">No account with id ${esc(id)} in the dataset.</div>`;
+      card.innerHTML = `<div class="card note">No account with id ${esc(id)} in this dataset.</div>`;
     }
   }
 
@@ -114,7 +118,7 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
       ? "not modelled (the model only covers TRANSFER and CASH_OUT)"
       : `${row.fraud_probability.toFixed(4)} &rarr; <b>${row.model_flag ? "flagged as fraud" : "looks legitimate"}</b>`;
     $("txDetail").innerHTML = `<div class="card"><h3>Transaction ${row.tx_id}</h3><dl class="kv">` +
-      kv("Time", `${when(row)} (hour ${row.step} of the simulation)`) +
+      kv("Time", row.step ? `${when(row)} (hour ${row.step} of the simulation)` : when(row)) +
       kv("Type / amount", `${row.type}, ${num(row.amount, 2)}`) +
       kv("Sender", `${acct(row.name_orig)}: ${num(row.old_balance_orig, 2)} → ${num(row.new_balance_orig, 2)}`) +
       kv("Receiver", `${acct(row.name_dest)}: ${num(row.old_balance_dest, 2)} → ${num(row.new_balance_dest, 2)}`) +
@@ -170,6 +174,12 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
   });
 
   const EXAMPLES = {
+    // examples for an uploaded file
+    async topRisk() { return { flagged: "true", sort: "fraud_probability", order: "desc" }; },
+    async bigFlagged() { return { flagged: "true", sort: "amount", order: "desc" }; },
+    async missed() { return { fraud: "true", flagged: "false" }; },
+    async falseAlarm() { return { fraud: "false", flagged: "true", sort: "fraud_probability", order: "desc" }; },
+    // examples for PaySim
     async fraudSender() {
       const skips = [0, 40, 120, 300];
       const r = await api(`/api/search?fraud=true&type=TRANSFER&limit=1&skip=${skips[exampleClicks % skips.length]}`);
@@ -200,7 +210,11 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
   }));
 
   // ---- benchmark ----
+  let benchmarkShown = false;
+
   async function showBenchmark() {
+    if (benchmarkShown) return;
+    benchmarkShown = true;
     let b;
     try {
       b = (await data.result("search_benchmark"))[0];
@@ -252,8 +266,48 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
       `Spark's time excludes JVM start-up. Numbers differ between machines: rerun with python -m scripts.benchmark_search.`;
   }
 
+  const PAYSIM_INTRO = $("explorerIntro").innerHTML;
+
+  function resetResults() {
+    form.reset();
+    state.query = {};
+    $("searchStatus").hidden = true;
+    $("accountCard").innerHTML = "";
+    $("txDetail").innerHTML = "";
+    $("searchPager").hidden = true;
+    table($("searchTable"), [], []);
+  }
+
+  // Shows the controls that make sense for the selected dataset and clears the previous results.
+  function applyDataset() {
+    const up = datasets.isUpload();
+    document.querySelectorAll("#view-explorer [data-upload-only]").forEach((el) => (el.hidden = !up));
+    $("examplesPaysim").hidden = up;
+    $("examplesUpload").hidden = !up;
+    document.querySelectorAll("#examplesUpload [data-needs-labels]").forEach((b) => (b.hidden = !datasets.current.labelled));
+    $("benchSection").hidden = up;
+    $("explorerIntro").innerHTML = up
+      ? `Search <b>${esc(datasets.current.name)}</b> (${num(datasets.current.rows)} rows). An account lookup uses an index built when the file was uploaded, ` +
+        `so it takes milliseconds. Every row was scored by the fraud model when the file was processed, so you can filter on the model's verdict ` +
+        `and sort by its score.`
+      : PAYSIM_INTRO;
+    resetResults();
+  }
+
+  window.addEventListener("datasetchange", applyDataset);
+
+  window.explorer.open = function (values) { // used by the Overview tab to jump to an account
+    location.hash = "explorer";
+    showView("explorer");
+    fillForm(values);
+    state.query = readForm();
+    run(0);
+  };
+
   views.explorer = {
     async show() {
+      applyDataset();
+      if (datasets.isUpload()) return;
       try {
         const health = await api("/api/health");
         if (!health.search_index) throw health;
