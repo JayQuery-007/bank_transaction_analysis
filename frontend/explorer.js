@@ -209,68 +209,6 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
     }
   }));
 
-  // ---- benchmark ----
-  let benchmarkShown = false;
-
-  async function showBenchmark() {
-    if (benchmarkShown) return;
-    let b;
-    try {
-      b = (await data.result("search_benchmark"))[0];
-    } catch (err) {
-      return;
-    }
-    if (!b) return;
-    benchmarkShown = true;
-    $("benchIntro").textContent =
-      `Task: ${b.query}, among ${num(b.rows_searched)} transactions. The same lookup for ${b.accounts_tested} random accounts, run four ways.`;
-    const LABEL = {
-      "Spark SQL": ["Distributed batch scan", "reads every stored record"],
-      "DuckDB on Parquet": ["Direct file scan", "reads the stored files, no table or index"],
-      "DuckDB table, index off": ["Table scan", "scans the transaction table, no index"],
-      "DuckDB table, ART index": ["Indexed lookup", "jumps straight to the account (what this search uses)"],
-    };
-    const engines = b.engines.map((e) => ({ ...e, indexed: e.name.includes("ART"), name: (LABEL[e.name] || [e.name])[0], method: (LABEL[e.name] || [0, e.method])[1] }));
-    table($("benchTable"), ["Method", "Median", "95th percentile", "vs index"],
-      engines.map((e) => ({
-        cls: e.indexed ? "highlight" : "",
-        cells: [`${e.name}<br><span class="note">${e.method}</span>`, latency(e.median_ms), latency(e.p95_ms),
-          e.slowdown_vs_index === 1 ? "–" : `${num(e.slowdown_vs_index, 0)}× slower`],
-      })));
-
-    const valueLabels = {
-      id: "valueLabels",
-      afterDatasetsDraw(chart) {
-        const { ctx } = chart;
-        ctx.save();
-        ctx.fillStyle = "#1f2328";
-        ctx.font = "12px sans-serif";
-        chart.getDatasetMeta(0).data.forEach((bar, i) => ctx.fillText(latency(engines[i].median_ms), bar.x + 6, bar.y + 4));
-        ctx.restore();
-      },
-    };
-    new Chart($("benchChart"), {
-      type: "bar",
-      plugins: [valueLabels],
-      data: {
-        labels: engines.map((e) => e.name),
-        datasets: [{
-          data: engines.map((e) => e.median_ms),
-          backgroundColor: engines.map((e) => (e.indexed ? COLORS.accent : COLORS.legit)),
-        }],
-      },
-      options: {
-        indexAxis: "y",
-        layout: { padding: { right: 60 } },
-        plugins: { legend: { display: false }, title: { display: true, text: "Median lookup time (log scale, lower is faster)" } },
-        scales: { x: { type: "logarithmic", min: 1, title: { display: true, text: "milliseconds" } } },
-      },
-    });
-    const env = b.environment;
-    $("benchNote").textContent =
-      `Measured ${env.generated_at} on a ${env.cpu_threads}-thread server. Times are measured on the server and exclude the network, so they differ between machines.`;
-  }
-
   const PAYSIM_INTRO = $("explorerIntro").innerHTML;
 
   function resetResults() {
@@ -292,7 +230,6 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
     $("examplesPaysim").hidden = up;
     $("examplesUpload").hidden = !up;
     document.querySelectorAll("#examplesUpload [data-needs-labels]").forEach((b) => (b.hidden = !datasets.current.labelled));
-    $("benchSection").hidden = up;
     $("explorerIntro").innerHTML = up
       ? `Search <b>${esc(datasets.current.name)}</b> (${num(datasets.current.rows)} rows). An account lookup uses an index built when the file was uploaded, ` +
         `so it takes milliseconds. Every row was scored by the fraud model when the file was processed, so you can filter on the model's verdict ` +
@@ -314,7 +251,7 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
     run(0);
   };
 
-  // the main ledger needs its search index; checks it and shows the speed comparison
+  // the main ledger needs its search index; checks that its search index is ready
   async function openMainLedger() {
       try {
         const health = await api("/api/health");
@@ -328,7 +265,6 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
         form.querySelectorAll("input, select, button").forEach((el) => (el.disabled = true));
         return;
       }
-      showBenchmark();
   }
 
   views.explorer = {
