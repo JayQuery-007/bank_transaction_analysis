@@ -229,7 +229,31 @@
   </section>
 
 </div>
-<div class="view" id="view-upload" hidden></div>
+<div class="view" id="view-upload" hidden>
+
+  <section>
+    <h2>Upload transactions</h2>
+    <p class="sub">Upload a CSV of transactions in the PaySim format and every row is scored by the fraud model. Up to 100,000 rows or 25 MB. Uploads are private to this browser, and the scored file is kept for 24 hours.</p>
+    <div id="uploadBanner"></div>
+    <div id="dropzone" class="dropzone" tabindex="0">
+      <p><b>Drop a CSV file here</b> or
+        <label class="link-btn">choose a file<input type="file" id="fileInput" accept=".csv,text/csv,text/plain" hidden></label></p>
+      <p class="note">Required columns: <code>type, amount, nameOrig, oldbalanceOrg, newbalanceOrig, nameDest, oldbalanceDest, newbalanceDest</code>
+        and <code>step</code> (or <code>hour_of_day</code>). Add <code>isFraud</code> (0/1) to measure the model's accuracy on your file.</p>
+      <p><button type="button" id="useSample" class="primary">Try the sample file (500 rows)</button>
+        <a href="api/uploads/sample.csv" download>download the sample</a></p>
+      <p class="note">The sample rows come from the PaySim dataset, and the model saw about 70% of them during training, so its scores on this sample are optimistic.</p>
+    </div>
+    <div id="uploadStatus" class="search-status" hidden></div>
+    <div id="uploadResult"></div>
+  </section>
+
+  <section>
+    <h2>Your uploads</h2>
+    <div class="scroll"><table id="uploadTable" class="data small"></table></div>
+  </section>
+
+</div>
 
 </main>
 
@@ -240,5 +264,6 @@
 <script src="app.js"></script>
 <script src="explorer.js"></script>
 <script src="cases.js"></script>
+<script src="upload.js"></script>
 </body>
 </html>

@@ -9,7 +9,7 @@ from pymongo.errors import PyMongoError
 
 from config import ROOT
 
-from . import cases, db, forest, search, store
+from . import cases, db, forest, search, store, uploads
 
 
 @asynccontextmanager
@@ -21,6 +21,7 @@ async def lifespan(_app):
 app = FastAPI(title="Bank Transaction Analytics API", lifespan=lifespan)
 app.include_router(search.router)
 app.include_router(cases.router)
+app.include_router(uploads.router)
 
 RESULT_SETS = {
     "overview", "data_quality", "type_summary", "hourly", "daily", "amount_bands",
