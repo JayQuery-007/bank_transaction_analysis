@@ -199,7 +199,7 @@ def test_spreadsheet_formulas_are_neutralised_in_the_download(client, owner):
 
 def test_filename_cannot_escape_the_upload_directory(client, owner, upload_dir):
     b = post(client, owner, make(LEGIT_ROW), name="../../evil.csv").json()
-    assert [p.name for p in upload_dir.iterdir()] == [f"{b['id']}.csv"]
+    assert sorted(p.name for p in upload_dir.iterdir()) == [f"{b['id']}.csv", f"{b['id']}.duckdb"]  # nothing outside the folder
     cd = client.get(f"/api/uploads/{b['id']}/scored.csv", headers=h(owner)).headers["content-disposition"]
     assert "evil_scored.csv" in cd and ".." not in cd
 

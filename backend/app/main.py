@@ -9,7 +9,7 @@ from pymongo.errors import PyMongoError
 
 from config import ROOT
 
-from . import cases, db, forest, search, store, uploads
+from . import cases, datasets, db, forest, search, store, uploads
 
 
 @asynccontextmanager
@@ -26,6 +26,7 @@ app = FastAPI(title="Bank Transaction Analytics API", lifespan=lifespan)
 app.include_router(search.router)
 app.include_router(cases.router)
 app.include_router(uploads.router)
+app.include_router(datasets.router)
 
 RESULT_SETS = {
     "overview", "data_quality", "type_summary", "hourly", "daily", "amount_bands",

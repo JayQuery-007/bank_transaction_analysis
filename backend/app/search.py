@@ -10,11 +10,11 @@ import time
 from typing import Literal, Optional
 
 import duckdb
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query
 
 from config import SEARCH_DB
 
-from . import forest
+from . import db, forest, uploads
 
 router = APIRouter(prefix="/api", tags=["search"])
 
@@ -24,6 +24,9 @@ COLUMNS = ("tx_id", "step", "day", "hour_of_day", "type", "amount", "name_orig",
            "new_balance_orig", "name_dest", "old_balance_dest", "new_balance_dest", "is_fraud",
            "is_flagged_fraud")
 SORTABLE = {"tx_id": "tx_id", "amount": "amount", "step": "step"}
+# an uploaded file is scored when it is processed, so its table also holds the model's verdict
+UPLOAD_COLUMNS = COLUMNS + ("fraud_probability", "model_flag")
+UPLOAD_SORTABLE = {**SORTABLE, "fraud_probability": "fraud_probability"}
 ACCOUNT_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 
 _lock = threading.Lock()
@@ -119,8 +122,22 @@ def _score(rows):
     return rows
 
 
-def _rows(cursor):
-    return [dict(zip(COLUMNS, row)) for row in cursor.fetchall()]
+class Target:
+    """What one request searches: the built-in PaySim index, or one of the owner's uploaded files."""
+
+    def __init__(self, con, columns, sortable, stored_scores):
+        self.con, self.columns, self.sortable, self.stored_scores = con, columns, sortable, stored_scores
+
+
+def _target(dataset, x_owner):
+    if dataset in (None, "", "paysim"):
+        return Target(_connection(), COLUMNS, SORTABLE, False)
+    con, _batch = uploads.dataset_connection(dataset, db.current_owner(x_owner))
+    return Target(con, UPLOAD_COLUMNS, UPLOAD_SORTABLE, True)
+
+
+def _rows(cursor, columns):
+    return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
 
 @router.get("/search")
@@ -133,10 +150,13 @@ def search(
     hour_from: Optional[int] = Query(None, ge=0, le=23),
     hour_to: Optional[int] = Query(None, ge=0, le=23),
     fraud: Optional[bool] = Query(None, description="Filter on the dataset's fraud label"),
-    sort: Literal["tx_id", "amount", "step"] = "tx_id",
+    flagged: Optional[bool] = Query(None, description="Filter on the model's verdict (uploaded datasets only)"),
+    sort: Literal["tx_id", "amount", "step", "fraud_probability"] = "tx_id",
     order: Literal["asc", "desc"] = "asc",
     skip: int = Query(0, ge=0, le=10000),
     limit: int = Query(25, ge=1, le=200),
+    dataset: str = Query("paysim", description="'paysim' or the id of one of your uploads"),
+    x_owner: Optional[str] = Header(None),
 ):
     if account is not None and not ACCOUNT_RE.match(account):
         raise HTTPException(422, "account must be 1-32 letters, digits, '_' or '-'")
@@ -144,26 +164,32 @@ def search(
         raise HTTPException(422, "hour_from must not be greater than hour_to")
     if min_amount is not None and max_amount is not None and min_amount > max_amount:
         raise HTTPException(422, "min_amount must not be greater than max_amount")
+    target = _target(dataset, x_owner)
+    if sort not in target.sortable:
+        raise HTTPException(422, f"sort={sort} is only available for uploaded datasets")
+    if flagged is not None and "model_flag" not in target.columns:
+        raise HTTPException(422, "the flagged filter is only available for uploaded datasets")
 
     filters, fparams = [], []
     for clause, value in [("type = ?", type), ("amount >= ?", min_amount), ("amount <= ?", max_amount),
                           ("hour_of_day >= ?", hour_from), ("hour_of_day <= ?", hour_to),
-                          ("is_fraud = ?", None if fraud is None else int(fraud))]:
+                          ("is_fraud = ?", None if fraud is None else int(fraud)),
+                          ("model_flag = ?", flagged)]:
         if value is not None:
             filters.append(clause)
             fparams.append(value)
 
-    cur = _connection().cursor()
+    cur = target.con.cursor()
     started = time.perf_counter()
     if account:
-        items, total = _search_account(cur, account, role, filters, fparams, sort, order, skip, limit)
+        items, total = _search_account(cur, target, account, role, filters, fparams, sort, order, skip, limit)
     else:
-        items, total = _search_scan(cur, filters, fparams, sort, order, skip, limit)
+        items, total = _search_scan(cur, target, filters, fparams, sort, order, skip, limit)
     took_ms = (time.perf_counter() - started) * 1000
     cur.close()
 
     return {
-        "items": _score(items), "total": total, "skip": skip, "limit": limit,
+        "items": items if target.stored_scores else _score(items), "total": total, "skip": skip, "limit": limit,
         "took_ms": round(took_ms, 2), "access": "index" if account else "scan",
     }
 
@@ -171,7 +197,7 @@ def search(
 ACCOUNT_ROW_CAP = 5000  # PaySim's busiest account has 113 rows; the cap only guards against odd data
 
 
-def _search_account(cur, account, role, filters, fparams, sort, order, skip, limit):
+def _search_account(cur, target, account, role, filters, fparams, sort, order, skip, limit):
     """Index lookups on the sender and/or receiver column, then merge and sort the few rows in Python.
 
     Doing the ORDER BY in SQL makes DuckDB drop the account index (12x slower, measured), and
@@ -182,49 +208,53 @@ def _search_account(cur, account, role, filters, fparams, sort, order, skip, lim
     rows = {}
     for side, column in sides.items():
         if role in ("any", side):
-            sql = f"SELECT {', '.join(COLUMNS)} FROM transactions WHERE {column} = ?{extra} LIMIT ?"
-            for row in _rows(cur.execute(sql, [account, *fparams, ACCOUNT_ROW_CAP])):
+            sql = f"SELECT {', '.join(target.columns)} FROM transactions WHERE {column} = ?{extra} LIMIT ?"
+            for row in _rows(cur.execute(sql, [account, *fparams, ACCOUNT_ROW_CAP]), target.columns):
                 rows[row["tx_id"]] = row
+    key = target.sortable[sort]
     ordered = sorted(rows.values(), key=lambda r: r["tx_id"])
-    ordered.sort(key=lambda r: r[SORTABLE[sort]], reverse=order == "desc")
+    present = [r for r in ordered if r[key] is not None]  # rows without a value (e.g. an unscored type) always come last
+    present.sort(key=lambda r: r[key], reverse=order == "desc")
+    ordered = present + [r for r in ordered if r[key] is None]
     return ordered[skip: skip + limit], len(ordered)
 
 
-def _search_scan(cur, filters, fparams, sort, order, skip, limit):
+def _search_scan(cur, target, filters, fparams, sort, order, skip, limit):
     where_sql = f"WHERE {' AND '.join(filters)}" if filters else ""
-    order_sql = f"ORDER BY {SORTABLE[sort]} {'DESC' if order == 'desc' else 'ASC'}, tx_id"
+    order_sql = f"ORDER BY {target.sortable[sort]} {'DESC' if order == 'desc' else 'ASC'} NULLS LAST, tx_id"
     total = cur.execute(f"SELECT count(*) FROM transactions {where_sql}", fparams).fetchone()[0]
     items = _rows(cur.execute(
-        f"SELECT {', '.join(COLUMNS)} FROM transactions {where_sql} {order_sql} LIMIT ? OFFSET ?",
-        fparams + [limit, skip]))
+        f"SELECT {', '.join(target.columns)} FROM transactions {where_sql} {order_sql} LIMIT ? OFFSET ?",
+        fparams + [limit, skip]), target.columns)
     return items, total
 
 
-def fetch_transaction(tx_id):
+def fetch_transaction(tx_id, dataset="paysim", owner=None):
     """One transaction with its model score, or None. Also used when a case is opened."""
-    cur = _connection().cursor()
+    target = _target(dataset, owner)
+    cur = target.con.cursor()
     started = time.perf_counter()
-    rows = _rows(cur.execute(f"SELECT {', '.join(COLUMNS)} FROM transactions WHERE tx_id = ?", [tx_id]))
+    rows = _rows(cur.execute(f"SELECT {', '.join(target.columns)} FROM transactions WHERE tx_id = ?", [tx_id]), target.columns)
     took_ms = (time.perf_counter() - started) * 1000
     cur.close()
     if not rows:
         return None
-    return {**_score(rows)[0], "took_ms": round(took_ms, 2)}
+    return {**(rows if target.stored_scores else _score(rows))[0], "took_ms": round(took_ms, 2)}
 
 
 @router.get("/transactions/{tx_id}")
-def get_transaction(tx_id: int):
-    row = fetch_transaction(tx_id)
+def get_transaction(tx_id: int, dataset: str = "paysim", x_owner: Optional[str] = Header(None)):
+    row = fetch_transaction(tx_id, dataset, x_owner)
     if row is None:
         raise HTTPException(404, f"Transaction {tx_id} not found")
     return row
 
 
 @router.get("/accounts/{account_id}")
-def account_summary(account_id: str):
+def account_summary(account_id: str, dataset: str = "paysim", x_owner: Optional[str] = Header(None)):
     if not ACCOUNT_RE.match(account_id):
         raise HTTPException(422, "invalid account id")
-    cur = _connection().cursor()
+    cur = _target(dataset, x_owner).con.cursor()
     started = time.perf_counter()
     sent = cur.execute(
         "SELECT count(*), coalesce(sum(amount), 0), coalesce(sum(is_fraud), 0), min(step), max(step) "

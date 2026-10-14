@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
-from . import db, search
+from . import db, search, uploads
 
 router = APIRouter(prefix="/api/cases", tags=["cases"])
 
@@ -40,7 +40,8 @@ SNAPSHOT_FIELDS = ("type", "amount", "name_orig", "name_dest", "step", "day", "h
 
 class CaseCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    tx_id: int = Field(ge=1, description="Transaction id from the search index")
+    tx_id: int = Field(ge=1, description="Transaction id within the dataset (the row number for an uploaded file)")
+    dataset: str = Field("paysim", pattern=r"^(paysim|[0-9a-f]{24})$", description="'paysim' or the id of one of your uploads")
     priority: Optional[Priority] = None
     assignee: str = Field("", max_length=60)
     note: str = Field("", max_length=2000)
@@ -89,13 +90,17 @@ def create_case(body: CaseCreate, owner: str = Depends(db.current_owner)):
     cases = db.collection("cases")
     if cases.count_documents({"owner": owner}) >= MAX_CASES_PER_OWNER:
         raise HTTPException(409, f"Limit of {MAX_CASES_PER_OWNER} cases reached. Delete some to open new ones.")
-    tx = search.fetch_transaction(body.tx_id)
+    tx = search.fetch_transaction(body.tx_id, body.dataset, owner)  # 404 if the upload is not this owner's
     if tx is None:
         raise HTTPException(404, f"Transaction {body.tx_id} not found")
+    dataset_name = "PaySim"
+    if body.dataset != "paysim":
+        dataset_name = uploads._ensure_indexes().find_one({"_id": ObjectId(body.dataset), "owner": owner}, {"filename": 1})["filename"]
 
     now = _now()
     doc = {
-        "owner": owner, "tx_ref": f"dataset:{body.tx_id}", "tx_id": body.tx_id,
+        "owner": owner, "tx_ref": f"{body.dataset}:{body.tx_id}", "tx_id": body.tx_id,
+        "dataset": body.dataset, "dataset_name": dataset_name,
         "tx": {k: tx[k] for k in SNAPSHOT_FIELDS},
         "status": "new", "is_open": True,
         "priority": body.priority or _default_priority(tx),

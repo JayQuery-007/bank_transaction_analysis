@@ -11,17 +11,19 @@ import os
 import tempfile
 import threading
 import time
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
+import duckdb
 import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.csv as pacsv
 from bson import ObjectId
 from bson.errors import InvalidId
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 
 from config import RESULTS_DIR
@@ -88,13 +90,55 @@ def _file_path(batch_id):
     return UPLOAD_DIR / f"{batch_id}.csv"
 
 
+def _db_path(batch_id):
+    return UPLOAD_DIR / f"{batch_id}.duckdb"
+
+
 def _remove_old_files():
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     cutoff = time.time() - FILE_TTL_SECONDS
-    for pattern in ("*.csv", "*.part", "*.upload"):
+    for pattern in ("*.csv", "*.part", "*.upload", "*.duckdb", "*.building", "*.wal"):
         for f in UPLOAD_DIR.glob(pattern):
-            if f.stat().st_mtime < cutoff:
-                f.unlink(missing_ok=True)
+            try:
+                if f.stat().st_mtime < cutoff:
+                    _close_dataset_connection(f.stem)
+                    f.unlink(missing_ok=True)
+            except OSError:  # still open on Windows; it is removed on a later upload
+                pass
+
+
+# Read-only connections to the per-upload search databases; a few are kept open, the oldest is closed first.
+_dataset_connections = OrderedDict()
+_dataset_lock = threading.Lock()
+MAX_OPEN_DATASETS = 3
+
+
+def _close_dataset_connection(batch_id):
+    with _dataset_lock:
+        con = _dataset_connections.pop(batch_id, None)
+    if con is not None:
+        con.close()
+
+
+def dataset_connection(batch_id, owner):
+    """(connection, batch document) for one of the owner's finished uploads. Raises 404 / 410."""
+    doc = _ensure_indexes().find_one({"_id": _object_id(batch_id), "owner": owner})
+    if doc is None or doc.get("status") != "done":
+        raise HTTPException(404, "Dataset not found")
+    path = _db_path(batch_id)
+    if not path.exists():
+        raise HTTPException(410, "This upload's search index has expired (kept for 24 hours). Upload the file again.")
+    with _dataset_lock:
+        con = _dataset_connections.get(batch_id)
+        if con is None:
+            con = duckdb.connect(str(path), read_only=True)
+            con.execute("PRAGMA memory_limit='512MB'")
+            _dataset_connections[batch_id] = con
+            while len(_dataset_connections) > MAX_OPEN_DATASETS:
+                _dataset_connections.popitem(last=False)[1].close()
+        else:
+            _dataset_connections.move_to_end(batch_id)
+    return con, doc
 
 
 def _ensure_indexes():
@@ -107,7 +151,7 @@ def _ensure_indexes():
 
 
 def _public(doc, with_rows=False):
-    out = {k: v for k, v in doc.items() if k not in ("_id", "owner", "flagged_rows")}
+    out = {k: v for k, v in doc.items() if k not in ("_id", "owner", "flagged_rows", "analytics")}
     out["id"] = str(doc["_id"])
     out["created_at"] = doc["created_at"].isoformat()
     if out["status"] == "processing" and out["id"] not in _running:
@@ -331,6 +375,7 @@ def _append_output(v, keep, prob, row_numbers, writer_holder, out_part):
         "oldbalanceDest": pa.array(nums["old_balance_dest"][keep]),
         "newbalanceDest": pa.array(nums["new_balance_dest"][keep]),
         "step": pa.array(np.zeros(len(keep), dtype=np.int64) if v["step"] is None else v["step"][keep], mask=np.full(len(keep), v["step"] is None)),
+        "hour_of_day": pa.array(v["hour"][keep]),
         "isFraud": pa.array(np.zeros(len(keep), dtype=np.int64) if v["label"] is None else v["label"][keep].astype(np.int64),
                             mask=np.full(len(keep), v["label"] is None)),
         "fraud_probability": pa.array(np.nan_to_num(probs), mask=~has_prob),
@@ -339,6 +384,73 @@ def _append_output(v, keep, prob, row_numbers, writer_holder, out_part):
     if writer_holder[0] is None:
         writer_holder[0] = pacsv.CSVWriter(str(out_part), table.schema)
     writer_holder[0].write_table(table)
+
+
+# ---------------------------------------------------------------------------------------------
+# a search index and overview numbers for each upload
+# ---------------------------------------------------------------------------------------------
+SCORED_COLUMNS = ("{'row': 'BIGINT', 'type': 'VARCHAR', 'amount': 'DOUBLE', 'nameOrig': 'VARCHAR', 'oldbalanceOrg': 'DOUBLE', "
+                  "'newbalanceOrig': 'DOUBLE', 'nameDest': 'VARCHAR', 'oldbalanceDest': 'DOUBLE', 'newbalanceDest': 'DOUBLE', "
+                  "'step': 'BIGINT', 'hour_of_day': 'BIGINT', 'isFraud': 'BIGINT', 'fraud_probability': 'DOUBLE', 'model_flag': 'VARCHAR'}")
+
+
+def _query_rows(con, sql):
+    cursor = con.execute(sql)
+    names = [d[0] for d in cursor.description]
+    return [dict(zip(names, (round(v, 4) if isinstance(v, float) else v for v in row))) for row in cursor.fetchall()]
+
+
+def _analytics(con):
+    """The numbers behind an upload's Overview tab, from SQL over its own table."""
+    q = lambda sql: _query_rows(con, sql)
+    return {
+        "overview": q("""SELECT count(*) AS transactions, sum(amount) AS total_amount, count(model_flag) AS scored,
+                                coalesce(sum(model_flag::INT), 0) AS flagged,
+                                coalesce(sum(CASE WHEN model_flag THEN amount END), 0) AS flagged_amount,
+                                count(DISTINCT name_orig) AS senders, count(DISTINCT name_dest) AS receivers, max(day) AS days,
+                                sum(is_fraud) AS labelled_fraud, sum(CASE WHEN is_fraud = 1 THEN amount END) AS labelled_fraud_amount
+                         FROM transactions""")[0],
+        "type_summary": q("""SELECT type, count(*) AS transactions, sum(amount) AS total_amount, avg(amount) AS avg_amount,
+                                    count(model_flag) AS scored, coalesce(sum(model_flag::INT), 0) AS flagged, sum(is_fraud) AS labelled_fraud
+                             FROM transactions GROUP BY type ORDER BY transactions DESC"""),
+        "hourly": q("""SELECT hour_of_day, count(*) AS transactions, count(model_flag) AS scored,
+                              coalesce(sum(model_flag::INT), 0) AS flagged, sum(is_fraud) AS labelled_fraud
+                       FROM transactions GROUP BY hour_of_day ORDER BY hour_of_day"""),
+        "amount_bands": q("""SELECT LEAST(GREATEST(FLOOR(LOG10(amount))::INT, 1), 7) AS band, count(*) AS transactions,
+                                    coalesce(sum(model_flag::INT), 0) AS flagged
+                             FROM transactions GROUP BY band ORDER BY band"""),
+        "score_histogram": q("""SELECT LEAST(FLOOR(fraud_probability * 10)::INT, 9) AS bin, count(*) AS transactions,
+                                       sum(is_fraud) AS labelled_fraud
+                                FROM transactions WHERE fraud_probability IS NOT NULL GROUP BY bin ORDER BY bin"""),
+        "top_flagged_receivers": q("""SELECT name_dest, count(*) AS flagged, sum(amount) AS total_amount
+                                      FROM transactions WHERE model_flag GROUP BY name_dest ORDER BY total_amount DESC LIMIT 10"""),
+    }
+
+
+def _index_upload(batch_id):
+    """Loads the scored CSV into a DuckDB file with indexes (so the Explorer can search it) and returns its analytics."""
+    building = UPLOAD_DIR / f"{batch_id}.building"
+    for stale in UPLOAD_DIR.glob(f"{batch_id}.building*"):
+        stale.unlink(missing_ok=True)
+    con = duckdb.connect(str(building))
+    try:
+        con.execute("PRAGMA memory_limit='1GB'")
+        con.execute(f"""
+            CREATE TABLE transactions AS
+            SELECT "row" AS tx_id, step, CASE WHEN step IS NULL THEN NULL ELSE (step - 1) // 24 + 1 END AS day, hour_of_day, type, amount,
+                   nameOrig AS name_orig, oldbalanceOrg AS old_balance_orig, newbalanceOrig AS new_balance_orig,
+                   nameDest AS name_dest, oldbalanceDest AS old_balance_dest, newbalanceDest AS new_balance_dest,
+                   isFraud AS is_fraud, 0 AS is_flagged_fraud, fraud_probability, (model_flag = 'true') AS model_flag
+            FROM read_csv('{_file_path(batch_id).as_posix()}', header = true, columns = {SCORED_COLUMNS})""")
+        con.execute("CREATE UNIQUE INDEX idx_id ON transactions(tx_id)")
+        con.execute("CREATE INDEX idx_orig ON transactions(name_orig)")
+        con.execute("CREATE INDEX idx_dest ON transactions(name_dest)")
+        analytics = _analytics(con)
+        con.execute("CHECKPOINT")
+    finally:
+        con.close()
+    os.replace(building, _db_path(batch_id))
+    return analytics
 
 
 # ---------------------------------------------------------------------------------------------
@@ -382,7 +494,7 @@ def _run_job(batch_id, src, names, mapping, estimated_rows):
                 if time.time() - last_update > 0.3:
                     last_update = time.time()
                     updated = batches.update_one({"_id": oid}, {"$set": {
-                        "rows_processed": parsed, "progress": round(min(0.99, parsed / max(estimated_rows, 1)), 3)}})
+                        "rows_processed": parsed, "progress": round(min(0.88, parsed / max(estimated_rows, 1) * 0.88), 3)}})
                     if updated.matched_count == 0:  # the user deleted the upload while it was running
                         return
         if writer_holder[0] is not None:
@@ -401,8 +513,13 @@ def _run_job(batch_id, src, names, mapping, estimated_rows):
         rnd = lambda value: None if value is None else round(value, 4)
         elapsed = time.perf_counter() - started
         os.replace(out_part, _file_path(batch_id))
+        batches.update_one({"_id": oid}, {"$set": {"phase": "indexing", "progress": 0.9}})
+        index_started = time.perf_counter()
+        analytics = _index_upload(batch_id)
+        indexing_ms = round((time.perf_counter() - index_started) * 1000, 1)
         batches.update_one({"_id": oid}, {"$set": {
-            "status": "done", "progress": 1.0, "rows_processed": parsed + len(skipped),
+            "status": "done", "phase": "done", "progress": 1.0, "rows_processed": parsed + len(skipped),
+            "indexing_ms": indexing_ms, "analytics": analytics,
             "rows_total": parsed + len(skipped), "rows_valid": acc["valid"], "rows_invalid": acc["invalid"] + len(skipped),
             "rows_scored": acc["scored"], "rows_not_modelled": acc["valid"] - acc["scored"], "flagged": acc["flagged"],
             "processing_ms": round(elapsed * 1000, 1), "rows_per_second": int((parsed + len(skipped)) / max(elapsed, 1e-9)),
@@ -421,6 +538,12 @@ def _run_job(batch_id, src, names, mapping, estimated_rows):
         if cancel.is_set() or batches.count_documents({"_id": oid}) == 0:
             out_part.unlink(missing_ok=True)
             _file_path(batch_id).unlink(missing_ok=True)
+            _close_dataset_connection(batch_id)
+            for leftover in UPLOAD_DIR.glob(f"{batch_id}.*"):
+                try:
+                    leftover.unlink(missing_ok=True)
+                except OSError:
+                    pass
         else:
             out_part.unlink(missing_ok=True)
         with _running_lock:
@@ -456,7 +579,7 @@ def upload(file: UploadFile = File(...), owner: str = Depends(db.current_owner))
         raise
 
     doc = {"_id": ObjectId(batch_id), "owner": owner, "filename": (file.filename or "upload.csv")[:120], "created_at": _now(),
-           "size_bytes": size, "status": "processing", "progress": 0.0, "rows_processed": 0, "rows_estimated": estimated_rows,
+           "size_bytes": size, "status": "processing", "phase": "scoring", "progress": 0.0, "rows_processed": 0, "rows_estimated": estimated_rows,
            "ignored_columns": [str(c)[:40] for c in names if c not in mapping.values()][:20]}
     batches.insert_one(doc)
     with _running_lock:
@@ -503,5 +626,10 @@ def delete_upload(batch_id: str, owner: str = Depends(db.current_owner)):
     event = _running.get(batch_id)
     if event is not None:
         event.set()  # the running job stops at its next block and removes its files
-    _file_path(batch_id).unlink(missing_ok=True)
+    _close_dataset_connection(batch_id)
+    for f in UPLOAD_DIR.glob(f"{batch_id}.*"):
+        try:
+            f.unlink(missing_ok=True)
+        except OSError:  # a running job still has it open (Windows); the job removes it when it stops
+            pass
     return Response(status_code=204)
