@@ -28,10 +28,38 @@ ACCOUNT_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 
 _lock = threading.Lock()
 _con = None
+_fetch = {"state": "idle", "error": None}  # idle | downloading | failed
 
 
 def index_available():
     return SEARCH_DB.exists()
+
+
+def index_state():
+    """ready | downloading | failed | missing, for the health check and the Explorer's message."""
+    if SEARCH_DB.exists():
+        return "ready"
+    return _fetch["state"] if _fetch["state"] != "idle" else "missing"
+
+
+def start_fetch():
+    """Hosted containers have no data lake: download the prebuilt index in the background so the
+    server starts at once and the Explorer says "downloading" until it is there."""
+    if SEARCH_DB.exists() or not os.environ.get("SEARCH_INDEX_REPO") or _fetch["state"] == "downloading":
+        return
+    _fetch.update(state="downloading", error=None)
+
+    def work():
+        try:
+            from serving import fetch_index
+
+            fetch_index.fetch()
+            warm_up()
+            _fetch["state"] = "idle"
+        except Exception as err:  # reported through /api/health
+            _fetch.update(state="failed", error=f"{type(err).__name__}: {str(err)[:200]}")
+
+    threading.Thread(target=work, daemon=True, name="fetch-search-index").start()
 
 
 def _connection():
@@ -39,6 +67,8 @@ def _connection():
     with _lock:
         if _con is None:
             if not SEARCH_DB.exists():
+                if _fetch["state"] == "downloading":
+                    raise HTTPException(503, "The search index is still downloading. Try again in a minute.")
                 raise HTTPException(503, "Search index not built. Run: python -m serving.build_search_index")
             con = duckdb.connect(str(SEARCH_DB), read_only=True)
             con.execute(f"PRAGMA memory_limit='{os.environ.get('SEARCH_MEMORY_LIMIT', '1GB')}'")

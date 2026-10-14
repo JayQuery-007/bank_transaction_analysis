@@ -1,9 +1,9 @@
-# Packages needed to serve the dashboard and API (used by the Dockerfile).
-pyspark==3.5.3
-pandas>=2.2
+# Packages the dashboard server needs (installed by the Dockerfile). No Spark or Java at serve time.
 numpy>=2.1
 pyarrow>=15
-setuptools
+duckdb>=1.4,<2
 pymongo>=4.9
 fastapi>=0.115
 uvicorn>=0.32
+python-multipart>=0.0.12
+huggingface_hub>=0.25

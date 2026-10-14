@@ -14,7 +14,11 @@ from . import cases, db, forest, search, store, uploads
 
 @asynccontextmanager
 async def lifespan(_app):
-    search.warm_up()
+    search.start_fetch()
+    try:
+        search.warm_up()
+    except Exception as err:  # keep serving everything else; /api/health reports the index state
+        print(f"search index not usable: {err}")
     yield
 
 
@@ -38,7 +42,8 @@ async def mongo_unavailable(_request, exc):
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "search_index": search.status(), "database": db.available()}
+    return {"status": "ok", "search_index": search.status(), "search_index_state": search.index_state(),
+            "database": db.available()}
 
 
 @app.get("/api/source")

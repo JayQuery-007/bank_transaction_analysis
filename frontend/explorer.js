@@ -256,10 +256,15 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
     async show() {
       try {
         const health = await api("/api/health");
-        if (!health.search_index) throw new Error("not built");
+        if (!health.search_index) throw health;
         $("explorerRows").textContent = num(health.search_index.rows);
       } catch (err) {
-        status("The search index has not been built yet. Run <code>python -m serving.build_search_index</code> and restart the server.", true);
+        const state = err && err.search_index_state;
+        status(state === "downloading"
+          ? "The search index is still downloading on the server. Try again in a minute."
+          : state === "failed"
+            ? "The search index could not be downloaded. Check the server logs."
+            : "The search index has not been built yet. Run <code>python -m serving.build_search_index</code> and restart the server.", true);
         form.querySelectorAll("input, select, button").forEach((el) => (el.disabled = true));
         return;
       }
