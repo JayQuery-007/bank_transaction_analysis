@@ -140,14 +140,30 @@ architecture.
 
 ### Upload: score your own file
 
-Upload a CSV in the dataset's format (up to 100,000 rows or 25 MB). Rows are validated (errors
-are listed with their real file row numbers and do not stop the upload), scored with the
-Random Forest, and summarised. If the file has an `isFraud` column the page reports precision,
-recall and a confusion matrix. The scored CSV can be downloaded for 24 hours; formula-like
-text in account names is neutralised so it cannot run when the CSV is opened in a spreadsheet.
-A 100,000-row file takes about 5 seconds end to end. A 500-row real sample is built in
-(`results/sample_upload.csv`); note the model saw about 70% of those rows during training, so
-its scores on the sample are optimistic.
+Upload a CSV in the dataset's format. Locally the limits are 5 million rows or 500 MB; the
+Docker image sets 100,000 rows or 25 MB for the public deployment (`UPLOAD_MAX_ROWS`,
+`UPLOAD_MAX_BYTES`). The file is saved to disk and a background job streams it in 16 MB blocks:
+each block is validated and scored with vectorised Arrow/numpy code and appended to the output
+CSV, so only counters and the 500 riskiest rows stay in memory and memory use does not grow with
+the file. The page shows a live progress bar. Rows that fail validation are listed with their
+real file row numbers and do not stop the upload. If the file has an `isFraud` column the page
+reports precision, recall and a confusion matrix. The scored CSV can be downloaded for 24 hours;
+formula-like text in account names is neutralised so it cannot run in a spreadsheet.
+
+Measured on a 16 GB Windows laptop, uploading real PaySim rows through the web page's API:
+
+| File | Rows | Size | Time | Flagged | Precision / recall |
+|---|---|---|---|---|---|
+| `paysim_sample_1_1200000_rows.csv` | 1,200,000 | 90 MB | 7.4 s | 1,504 | 99.4% / 98.5% |
+| `paysim_sample_2_2000000_rows.csv` | 2,000,000 | 151 MB | 8.5 s | 1,356 | 98.8% / 99.6% |
+| `paysim_sample_3_3000000_rows.csv` | 3,003,305 | 226 MB | 12.5 s | 3,831 | 99.5% / 99.7% |
+
+That is about 260,000 rows per second, and the server's memory peaked at 534 MB (154 MB idle)
+for all three. Scoring itself is fast because rows are scored in 25,000-row blocks on several
+threads: 426,000 rows/s, against 38,000 rows/s when the same rows are scored as one big array.
+Create the three files with `python -m scripts.make_big_samples` (they land in `data/samples/`,
+not in Git). A 500-row labelled sample is built in (`results/sample_upload.csv`). The model
+saw about 70% of these rows during training, so its scores on them are optimistic.
 
 Scoring in the application uses the Random Forest exported from Spark's model files and
 evaluated with numpy (`backend/app/forest.py`), not Spark itself. It gives the same
@@ -320,7 +336,8 @@ serving/
   fetch_index.py          downloads the index from a Hugging Face dataset repo (hosted container)
 scripts/
   benchmark_search.py     times one lookup four ways -> results/search_benchmark.json
-  make_sample_upload.py   builds results/sample_upload.csv
+  make_sample_upload.py   builds results/sample_upload.csv (500 rows)
+  make_big_samples.py     builds three CSVs of 1.2M, 2M and 3M real rows in data/samples/
 notebooks/eda.ipynb       exploratory analysis
 backend/app/
   main.py                 routes for results, scoring, health

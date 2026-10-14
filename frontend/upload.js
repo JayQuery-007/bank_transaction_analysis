@@ -2,8 +2,7 @@
 // Depends on helpers from app.js: $, apiAs, ownerId, num, esc, table, toast, views.
 
 (() => {
-  const MAX_BYTES = 25 * 1024 * 1024;
-  const state = { current: null, page: 0, pageSize: 15 };
+  const state = { current: null, page: 0, pageSize: 15, maxBytes: 500 * 1024 * 1024, maxRows: 5000000, tracking: null };
 
   const time = (iso) => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
   const pct = (v) => (v === null || v === undefined ? "n/a" : (v * 100).toFixed(1) + "%");
@@ -17,20 +16,43 @@
   }
 
   // ---- sending ----
+  const sizeText = (bytes) => (bytes >= 1048576 ? `${(bytes / 1048576).toFixed(bytes >= 10485760 ? 0 : 1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
+
   async function send(file) {
-    if (file.size > MAX_BYTES) return status(`${esc(file.name)} is ${(file.size / 1048576).toFixed(1)} MB; the limit is 25 MB.`, true);
-    status(`Uploading and scoring <b>${esc(file.name)}</b> (${(file.size / 1024).toFixed(0)} KB)&hellip;`);
+    if (file.size > state.maxBytes) return status(`${esc(file.name)} is ${sizeText(file.size)}; the limit is ${sizeText(state.maxBytes)}.`, true);
+    status(`Uploading <b>${esc(file.name)}</b> (${sizeText(file.size)})&hellip;`);
     $("uploadResult").innerHTML = "";
     const form = new FormData();
     form.append("file", file, file.name);
     try {
       const batch = await apiAs("/api/uploads", { method: "POST", body: form });
-      status("");
-      render(batch);
-      toast(`${num(batch.rows_valid)} rows scored, ${num(batch.flagged)} flagged`);
       loadList();
+      await track(batch.id);
     } catch (err) {
       status(`Could not process the file: ${esc(err.message)}`, true);
+    }
+  }
+
+  // The server scores the file in the background; follow it until it is done.
+  async function track(id) {
+    const token = (state.tracking = {});
+    for (;;) {
+      const b = await apiAs(`/api/uploads/${id}`);
+      if (state.tracking !== token) return; // another upload or view took over
+      if (b.status === "processing") {
+        const pctDone = Math.round((b.progress || 0) * 100);
+        status(`Scoring <b>${esc(b.filename)}</b>: <b>${pctDone}%</b> ` +
+          `(${num(b.rows_processed)} of about ${num(b.rows_estimated)} rows) ` +
+          `<span class="bar"><i style="width:${pctDone}%"></i></span>`);
+        await new Promise((r) => setTimeout(r, 450));
+        continue;
+      }
+      status("");
+      loadList();
+      if (b.status === "failed") return status(`Could not process ${esc(b.filename)}: ${esc(b.error)}`, true);
+      render(b);
+      toast(`${num(b.rows_valid)} rows scored, ${num(b.flagged)} flagged`);
+      return;
     }
   }
 
@@ -73,7 +95,7 @@
     $("uploadResult").innerHTML = `
       <div class="card">
         <div class="result-head">
-          <h3 style="margin:0">${esc(b.filename)} <span class="note">scored in ${num(b.scoring_ms, 0)} ms</span></h3>
+          <h3 style="margin:0">${esc(b.filename)} <span class="note">${num(b.rows_total)} rows scored in ${(b.processing_ms / 1000).toFixed(b.processing_ms < 10000 ? 2 : 1)} s (${num(b.rows_per_second)} rows/s)</span></h3>
           <div>
             <button type="button" id="dlScored" class="primary" ${b.download_available ? "" : "disabled title='expired after 24 hours'"}>Download scored CSV</button>
             <button type="button" id="delUpload" class="danger">Delete upload</button>
@@ -148,14 +170,19 @@
   // ---- history ----
   async function loadList() {
     try {
-      const { items, limit } = await apiAs("/api/uploads");
-      table($("uploadTable"), ["File", "Uploaded", "Rows", "Flagged", "Precision / recall", ""],
+      const { items, limit, max_rows, max_bytes } = await apiAs("/api/uploads");
+      state.maxBytes = max_bytes;
+      state.maxRows = max_rows;
+      $("uploadLimits").textContent = `Up to ${num(max_rows)} rows or ${sizeText(max_bytes)}`;
+      const rowsText = (b) => (b.status === "done" ? num(b.rows_valid) : b.status === "processing" ? `${Math.round((b.progress || 0) * 100)}%` : "–");
+      table($("uploadTable"), ["File", "Size", "Uploaded", "Rows", "Flagged", "Precision / recall", ""],
         items.map((b) => ({
-          cells: [esc(b.filename), time(b.created_at), num(b.rows_valid), num(b.flagged),
+          cells: [esc(b.filename), sizeText(b.size_bytes), time(b.created_at), rowsText(b),
+            b.status === "done" ? num(b.flagged) : b.status === "failed" ? '<span class="badge fraud">failed</span>' : "…",
             b.metrics ? `${pct(b.metrics.precision)} / ${pct(b.metrics.recall)}` : "–",
-            `<button type="button" data-view-id="${b.id}">View</button> <button type="button" data-dl-id="${b.id}" ${b.download_available ? "" : "disabled"}>Download</button> <button type="button" data-del-id="${b.id}" class="danger">Delete</button>`],
+            `<button type="button" data-view-id="${b.id}" ${b.status === "failed" ? "disabled" : ""}>View</button> <button type="button" data-dl-id="${b.id}" ${b.download_available ? "" : "disabled"}>Download</button> <button type="button" data-del-id="${b.id}" class="danger">Delete</button>`],
         })));
-      if (!items.length) $("uploadTable").insertAdjacentHTML("beforeend", `<tbody><tr><td colspan="6" class="empty">No uploads yet. You can keep up to ${limit}.</td></tr></tbody>`);
+      if (!items.length) $("uploadTable").insertAdjacentHTML("beforeend", `<tbody><tr><td colspan="7" class="empty">No uploads yet. You can keep up to ${limit}.</td></tr></tbody>`);
       state.items = items;
     } catch (err) {
       $("uploadBanner").innerHTML = `<div class="search-status error">${esc(err.message)}</div>`;
@@ -165,7 +192,7 @@
   $("uploadTable").addEventListener("click", async (e) => {
     const view = e.target.dataset.viewId, dl = e.target.dataset.dlId, del = e.target.dataset.delId;
     try {
-      if (view) { render(await apiAs(`/api/uploads/${view}`)); $("uploadResult").scrollIntoView({ behavior: "smooth" }); }
+      if (view) { await track(view); $("uploadStatus").scrollIntoView({ behavior: "smooth", block: "start" }); }
       if (dl) download(state.items.find((b) => b.id === dl));
       if (del) {
         await apiAs(`/api/uploads/${del}`, { method: "DELETE" });
@@ -194,5 +221,11 @@
     }
   });
 
-  views.upload = { show: loadList };
+  views.upload = {
+    async show() {
+      await loadList();
+      const running = (state.items || []).find((b) => b.status === "processing"); // e.g. after a page reload
+      if (running) track(running.id);
+    },
+  };
 })();

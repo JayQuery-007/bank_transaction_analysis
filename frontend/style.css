@@ -154,3 +154,7 @@ code { background: var(--bg-alt); padding: 1px 5px; border-radius: 4px; font-siz
 .stats3 { grid-template-columns: repeat(5, 1fr); margin: 12px 0; }
 ul.errors { margin: 4px 0 0; padding-left: 18px; font-size: 13px; color: var(--muted); }
 @media (max-width: 800px) { .stats3 { grid-template-columns: repeat(2, 1fr); } }
+
+/* upload progress */
+.bar { display: inline-block; width: 220px; height: 8px; border-radius: 4px; background: #dbe3ec; vertical-align: middle; margin-left: 8px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--accent); transition: width .3s; }

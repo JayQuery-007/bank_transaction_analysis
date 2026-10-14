@@ -83,4 +83,14 @@ def predict_transaction(tx: Transaction):
     return forest.score_one(tx.model_dump())
 
 
-app.mount("/", StaticFiles(directory=ROOT / "frontend", html=True), name="frontend")
+class RevalidatedStaticFiles(StaticFiles):
+    """Browsers must check with the server before reusing a page or script (a cheap 304 when unchanged),
+    otherwise a visitor can keep running an old script after the app was updated."""
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
+app.mount("/", RevalidatedStaticFiles(directory=ROOT / "frontend", html=True), name="frontend")

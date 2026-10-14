@@ -41,10 +41,35 @@ def h(owner):
     return {"X-Owner": owner}
 
 
-def post(client, owner, content, name="t.csv"):
+class Finished:
+    """Stands in for a response once a background job is done: 201 with the batch, or 422 with its error."""
+
+    def __init__(self, status_code, body):
+        self.status_code, self._body = status_code, body
+
+    def json(self):
+        return self._body
+
+
+def wait_for_job(client, owner, batch_id, seconds=120):
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        batch = client.get(f"/api/uploads/{batch_id}", headers=h(owner)).json()
+        if batch["status"] != "processing":
+            return batch
+        time.sleep(0.02)
+    raise AssertionError("the upload job did not finish")
+
+
+def post(client, owner, content, name="t.csv", wait=True):
+    """Uploads and, by default, waits for the job. Files rejected up front come back as the 4xx response."""
     if isinstance(content, str):
         content = content.encode()
-    return client.post("/api/uploads", files={"file": (name, content, "text/csv")}, headers=h(owner))
+    r = client.post("/api/uploads", files={"file": (name, content, "text/csv")}, headers=h(owner))
+    if r.status_code != 202 or not wait:
+        return r
+    batch = wait_for_job(client, owner, r.json()["id"])
+    return Finished(422, {"detail": batch["error"]}) if batch["status"] == "failed" else Finished(201, batch)
 
 
 def make(*rows, header=HEADER):
@@ -241,5 +266,103 @@ def test_large_upload_scores_quickly(client, owner):
     r = post(client, owner, make(*rows))
     assert r.status_code == 201
     b = r.json()
-    assert b["rows_valid"] == 20_000 and b["scoring_ms"] < 5000 and b["flagged"] > 2000
+    assert b["rows_valid"] == 20_000 and b["processing_ms"] < 5000 and b["flagged"] > 2000
     assert b["flagged_shown"] == uploads.MAX_FLAGGED_STORED == len(b["flagged_rows"])
+
+
+# ---------------------------------------------------------------------------------------------
+# streaming / background job behaviour
+# ---------------------------------------------------------------------------------------------
+MESSY = make(
+    LEGIT_ROW, FRAUD_ROW, WIRE_ROW, "3,TRANSFER,10,C1,10", "3,TRANSFER,abc,C1,10,0,C2,0,0,0",
+    *[(FRAUD_ROW if i % 3 else LEGIT_ROW) for i in range(150)], "3,TRANSFER,-5,C1,10,0,C2,0,0,0",
+    "3,CASH_IN,40,C7,100,60,C8,0,0,0", "5,TRANSFER,10,C1,10,0,C2,0,0,5", "9,TRANSFER,10,C1,10", LEGIT_ROW)
+
+
+def summary(batch):
+    keys = ("rows_total", "rows_valid", "rows_invalid", "rows_scored", "rows_not_modelled", "flagged", "metrics", "errors", "flagged_rows")
+    return {k: batch[k] for k in keys}
+
+
+def test_block_boundaries_do_not_change_the_result(client, owner, monkeypatch):
+    """Tiny blocks force many batches, with malformed rows landing on and across the boundaries."""
+    whole = post(client, owner, MESSY).json()
+    scored_whole = client.get(f"/api/uploads/{whole['id']}/scored.csv", headers=h(owner)).text
+    monkeypatch.setattr(uploads, "BLOCK_SIZE", 700)
+    blocks = post(client, owner, MESSY).json()
+    scored_blocks = client.get(f"/api/uploads/{blocks['id']}/scored.csv", headers=h(owner)).text
+    assert summary(blocks) == summary(whole)
+    assert scored_blocks == scored_whole
+    assert whole["rows_invalid"] >= 5 and whole["flagged"] > 50
+
+
+def test_progress_is_reported_and_finishes_at_one(client, owner):
+    r = post(client, owner, make(*[LEGIT_ROW] * 5000), wait=False)
+    assert r.status_code == 202
+    first = r.json()
+    assert first["status"] in ("processing", "done") and first["rows_estimated"] == 5000
+    done = wait_for_job(client, owner, first["id"])
+    assert done["status"] == "done" and done["progress"] == 1.0 and done["rows_processed"] == done["rows_total"] == 5000
+    assert done["rows_per_second"] > 0
+
+
+def test_deleting_a_running_upload_cleans_everything_up(client, owner, upload_dir):
+    r = post(client, owner, make(*[FRAUD_ROW] * 150_000), wait=False)
+    assert r.status_code == 202
+    assert client.delete(f"/api/uploads/{r.json()['id']}", headers=h(owner)).status_code == 204
+    assert wait_for(lambda: not uploads._running, 60)  # the job noticed and stopped
+    assert not list(upload_dir.iterdir())
+    assert client.get("/api/uploads", headers=h(owner)).json()["items"] == []
+
+
+def test_a_batch_left_processing_by_a_restart_is_reported_failed(client, owner):
+    from bson import ObjectId
+
+    batches = uploads._ensure_indexes()
+    oid = ObjectId()
+    batches.insert_one({"_id": oid, "owner": owner, "filename": "x.csv", "created_at": uploads._now(), "size_bytes": 1,
+                        "status": "processing", "progress": 0.4, "rows_processed": 10, "rows_estimated": 25, "ignored_columns": []})
+    batch = client.get(f"/api/uploads/{oid}", headers=h(owner)).json()
+    assert batch["status"] == "failed" and "interrupted" in batch["error"]
+    assert client.get(f"/api/uploads/{oid}/scored.csv", headers=h(owner)).status_code == 409
+
+
+def test_download_before_the_job_is_done_is_refused(client, owner):
+    from bson import ObjectId
+
+    oid = ObjectId()
+    uploads._ensure_indexes().insert_one({"_id": oid, "owner": owner, "filename": "x.csv", "created_at": uploads._now(), "size_bytes": 1,
+                                          "status": "processing", "progress": 0.1, "rows_processed": 1, "rows_estimated": 9, "ignored_columns": []})
+    with uploads._running_lock:
+        uploads._running[str(oid)] = __import__("threading").Event()
+    try:
+        assert client.get(f"/api/uploads/{oid}/scored.csv", headers=h(owner)).status_code == 409
+    finally:
+        uploads._running.pop(str(oid), None)
+
+
+def wait_for(condition, seconds):
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        if condition():
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def test_a_million_row_file_streams_through(client, owner, upload_dir):
+    """The point of the rewrite: about a million rows with memory that does not grow with the file."""
+    import resource_probe
+
+    rows = [FRAUD_ROW if i % 50 == 0 else LEGIT_ROW for i in range(1_050_000)]
+    started = time.time()
+    before = resource_probe.rss_mb()
+    r = post(client, owner, make(*rows))
+    elapsed = time.time() - started
+    assert r.status_code == 201
+    b = r.json()
+    assert b["rows_valid"] == 1_050_000 and b["flagged"] == 21_000 and b["flagged_shown"] == uploads.MAX_FLAGGED_STORED
+    assert resource_probe.rss_mb() - before < 700  # the file is ~90 MB of text; holding it as Python objects would be several GB
+    assert elapsed < 120
+    scored = upload_dir / f"{b['id']}.csv"
+    assert scored.exists() and sum(1 for _ in open(scored, "rb")) == 1_050_001

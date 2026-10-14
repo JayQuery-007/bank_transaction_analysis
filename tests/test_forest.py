@@ -53,3 +53,11 @@ def test_predict_endpoint_without_spark():
 def test_predict_rejects_bad_input():
     client = TestClient(app)
     assert client.post("/api/predict", json={"type": "PAYMENT", "amount": -5}).status_code == 422
+
+
+def test_static_files_must_be_revalidated_so_updates_are_never_stale():
+    client = TestClient(app)
+    first = client.get("/upload.js")
+    assert first.status_code == 200 and first.headers["cache-control"] == "no-cache"
+    again = client.get("/upload.js", headers={"If-None-Match": first.headers["etag"]})
+    assert again.status_code == 304  # unchanged files cost almost nothing
