@@ -439,7 +439,7 @@ numbered([
 ])
 P("The application is deliberately split so that the heavy work is done once, offline, and the web application only reads prepared results, indexes and the exported model. "
   "This keeps every user action fast and lets the web server run without Spark or Java.")
-figure("fig_architecture.png", "Fig 3.1 Architecture of the system: offline batch pipeline and online application", width_cm=15.5)
+figure("fig_architecture.png", "Fig 3.1 Architecture of the system: data sources, ingestion paths, shared stores, API and interface", width_cm=15.5)
 
 section("3.3 The Dataset")
 P("**Main dataset (PaySim).** The main dataset is PaySim, published on Kaggle. It contains 6,362,604 simulated mobile-money transactions over 31 days (744 hourly steps). It is labelled: each "

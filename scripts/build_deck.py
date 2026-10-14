@@ -105,11 +105,11 @@ def set_cell(tc, text, donor_run):
 def edit_table(shape, data, col_widths_in=None, drop_col=None):
     """data: header row then data rows. Rows and columns are added or removed to fit."""
     tbl = shape.table._tbl
-    if drop_col is not None:
+    for col in sorted([] if drop_col is None else ([drop_col] if isinstance(drop_col, int) else drop_col), reverse=True):
         grid = tbl.find("a:tblGrid", NS)
-        grid.remove(grid.findall("a:gridCol", NS)[drop_col])
+        grid.remove(grid.findall("a:gridCol", NS)[col])
         for tr in tbl.findall("a:tr", NS):
-            tr.remove(tr.findall("a:tc", NS)[drop_col])
+            tr.remove(tr.findall("a:tc", NS)[col])
     trs = tbl.findall("a:tr", NS)
     while len(trs) > len(data):
         tbl.remove(trs.pop())
@@ -148,24 +148,24 @@ set_first_run(box, 5, TITLE)
 for i, name in enumerate(STUDENTS):
     set_first_run(box, 7 + i, name)
 set_first_run(box, 10, GUIDE)
-notes(s, "Introduce the project, the team and the guide. One sentence: a big-data system that finds fraud among 6.36 million bank transactions and lets an analyst search, investigate and upload data.")
+notes(s, "Introduce the project, the team and the guide. One sentence: a fraud analytics platform that takes transaction data from a batch pipeline or a CSV upload to model scores, instant search and investigated cases.")
 
 # ------------------------------------------------------------------ 2 problem statement
 s = slides[1]
 box = shape_named(s, "Google Shape;75;p2")
 rewrite(box, [
     (0, ["The Core Problem"]),
-    (1, ["Fraud is extremely ", ("rare", True), ": in the PaySim data only ", ("8,197 of 6,362,604", True), " transactions (", ("0.13%", True),
-         ") are fraudulent. Existing approaches rely on fixed rules or single-machine notebooks that cannot search, investigate or score data at scale."]),
+    (1, ["Banks must find the ", ("very few fraudulent transactions", True), " hidden among ", ("millions of legitimate ones", True),
+         " and then act on them. Today this work is split across fixed rules, offline notebooks and separate tools, so an analyst cannot search, investigate and check new batches of transactions in one place."]),
     (2, []),
-    (3, [("Rules miss most fraud:", True), " The dataset's own rule flags only 16 of 8,197 frauds (recall 0.2%)."]),
-    (4, [("Accuracy hides the problem:", True), " A model that always says \"legitimate\" is 99.87% accurate yet useless, so precision and recall are needed."]),
-    (5, [("Scale and speed:", True), " A Spark scan to look up one account takes 1.4 s; an analyst needs the answer in milliseconds."]),
-    (6, [("Analysis stops at the model:", True), " Flagged transactions must be searched, investigated as cases, and new files must be scored; most solutions offer none of this."]),
+    (3, [("Rare, imbalanced events:", True), " Fraud is about 1 in 776 transactions in our benchmark data, so accuracy is meaningless; precision and recall are needed."]),
+    (4, [("Rules and notebooks do not scale:", True), " Fixed rules catch few frauds, and single-machine notebooks cannot process millions of rows."]),
+    (5, [("Slow lookups:", True), " Scanning all the data for one account takes over a second; analysts need answers in milliseconds."]),
+    (6, [("No workflow:", True), " Flagged transactions need case management, and new files of transactions must be scored and explored without rebuilding the pipeline."]),
     (7, []),
     (8, []),
 ])
-notes(s, "Fraud is about 1 in 776 transactions. Accuracy is meaningless; we judge with precision and recall. The gap is a complete system: scale, millisecond search, a case workflow and file upload.")
+notes(s, "The problem is not only detecting fraud but working with it: rare events, scale, slow lookups and no workflow. The gap is a complete platform: scalable processing, accurate detection, millisecond search, a case workflow and file upload.")
 
 # ------------------------------------------------------------------ 3-5 literature survey
 HEAD = ["Title/ Year", "Methodology", "Findings", "Limitation", "Algorithms Used"]
@@ -189,11 +189,11 @@ LIT = [
          "ML pipelines, Random Forest, Logistic Regression"],
     ],
     [
-        ["PaySim: A Financial Mobile Money Simulator for Fraud Detection (Lopez-Rojas et al., 2016)",
-         "Agent-based simulator calibrated on aggregated logs of a real mobile-money service.",
-         "Gives a labelled benchmark of 6.36 million transactions; fraud appears only in transfers and cash-outs.",
-         "Simulated data; the fraud pattern is simpler than real fraud.",
-         "Agent-based simulation"],
+        ["C-Store: A Column-oriented DBMS (Stonebraker et al., 2005)",
+         "Designed a database that stores each column separately, with compression and read-optimised storage.",
+         "Queries touching a few columns read far less data and compress well. The idea behind Parquet and DuckDB.",
+         "Optimised for reads and bulk loads; single-row updates are costly.",
+         "Column storage, compression, projections"],
         ["SMOTE: Synthetic Minority Over-sampling Technique (Chawla et al., 2002)",
          "Creates synthetic minority-class examples by interpolating between neighbouring minority points.",
          "Improves detection of the minority class on imbalanced data compared with plain undersampling.",
@@ -223,20 +223,20 @@ for slide, rows in zip(slides[2:5], LIT):
     edit_table(table_shape, [HEAD] + rows, WIDTHS)
     table_shape.left, table_shape.top = Inches(0.74), Inches(0.95)
 notes(slides[2], "Foundations: Random Forests for the model, Spark for the batch pipeline, MLlib for training at scale.")
-notes(slides[3], "The dataset (PaySim), how others handle imbalance (SMOTE), and why we use precision-recall metrics.")
+notes(slides[3], "Why columnar storage (C-Store), how others handle imbalance (SMOTE), and why we use precision-recall metrics.")
 notes(slides[4], "The two papers behind the search: DuckDB as the analytical engine and the adaptive radix tree as the index.")
 
 # ------------------------------------------------------------------ 6 objectives
 s = slides[5]
 OBJ = {
-    "Google Shape;102;p6": ("Process Big Data at Scale", [(2, ["Ingest and clean 6.36 million transactions into a partitioned Parquet lake with Spark."]),
-                                                          (3, ["Run Spark SQL analyses of where, when and how fraud occurs."])]),
-    "Google Shape;103;p6": ("Detect Rare Fraud Accurately", [(2, []), (3, ["Train and compare Logistic Regression and Random Forest with Spark MLlib."]),
-                                                              (4, ["Judge them with precision, recall and AUC-PR, not accuracy."])]),
-    "Google Shape;105;p6": ("Enable Instant Search", [(2, ["Find every transaction of an account in milliseconds with an index."]),
-                                                       (3, ["Suggest matching account ids while the user types."])]),
-    "Google Shape;104;p6": ("Support Investigation and Upload", [(2, []), (3, ["Manage fraud cases with create, read, update and delete."]),
-                                                                  (4, ["Score uploaded files of millions of rows and explore them."])]),
+    "Google Shape;102;p6": ("Scalable Data Processing", [(2, ["Process millions of transactions with Spark into a columnar data lake."]),
+                                                         (3, ["Accept any transaction file through a validated, streaming upload."])]),
+    "Google Shape;103;p6": ("Accurate Fraud Detection", [(2, []), (3, ["Train and compare models with Spark MLlib on imbalanced data."]),
+                                                         (4, ["Judge them with precision, recall and AUC-PR, not accuracy."])]),
+    "Google Shape;105;p6": ("Instant Search", [(2, ["Find every transaction of an account in milliseconds with an index."]),
+                                              (3, ["Build an index for each uploaded file as well."])]),
+    "Google Shape;104;p6": ("Investigation Workflow", [(2, []), (3, ["Manage fraud cases with create, read, update and delete."]),
+                                                       (4, ["Explore, analyse and open cases on any dataset."])]),
 }
 for name, (heading, bullets) in OBJ.items():
     shp = shape_named(s, name)
@@ -245,7 +245,7 @@ for name, (heading, bullets) in OBJ.items():
     rewrite(shp, [(0, [heading])] + blank + [(t, r) for t, r in bullets])
     for run in shp.text_frame._txBody.find("a:p", NS).findall("a:r", NS):
         run.find("a:rPr", NS).set("sz", "1800")
-notes(s, "Four objectives: process the data at scale, detect the rare fraud accurately, make search instant, and support investigation and upload.")
+notes(s, "Four objectives: scalable processing for any data, accurate detection, instant search on every dataset, and a workflow for investigation.")
 
 # ------------------------------------------------------------------ 7 system architecture
 s = slides[6]
@@ -258,63 +258,64 @@ with Image.open(image) as im:
     ratio = im.size[0] / im.size[1]
 width = int(height * ratio)
 s.shapes.add_picture(image, (prs.slide_width - width) // 2, Inches(0.95), width, height)
-notes(s, "Top half is the offline batch pipeline run once with Spark. Bottom half is the always-on application: a REST API that reads the index, the model and the stored results, and reads and writes cases and uploads.")
+notes(s, "Two ways in: bulk historical data goes through the Spark batch pipeline; uploaded CSV files go through the streaming upload job. Both produce the same things: scores from the trained model, a search index and analytics. One REST API serves the web interface, and the interface works on whichever dataset is selected.")
 
 # ------------------------------------------------------------------ 8 proposed solution
 s = slides[7]
 box = shape_named(s, "Google Shape;118;p8")
 rewrite(box, [
-    (0, [("Offline Batch Pipeline: ", True), "Spark ingests 6.36 million transactions into a partitioned Parquet lake, runs 7 SQL analyses and trains the models."]),
-    (1, [("Fraud Model: ", True), "A 60-tree Random Forest scores transfers and cash-outs from nine features, with 99.3% precision and 99.75% recall on held-out data."]),
-    (2, [("Millisecond Search: ", True), "An indexed table finds an account's transactions in about 2 to 7 ms, with suggestions while the user types."]),
+    (0, [("Data Platform: ", True), "A Spark batch pipeline prepares the bulk data; any CSV file can be uploaded and is validated and streamed through the same scoring."]),
+    (1, [("Fraud Model: ", True), "A 60-tree Random Forest scores each transaction from nine features. It is trained with Spark MLlib and served without Spark."]),
+    (2, [("Millisecond Search: ", True), "Every dataset, bulk or uploaded, gets an index, so account lookup and suggestions while typing answer in milliseconds."]),
     (3, [("Case Management: ", True), "Create, read, update and delete cases in MongoDB with a status workflow, notes and one open case per transaction."]),
-    (4, [("Upload and Batch Scoring: ", True), "Files of millions of rows are streamed, validated and scored in about a minute, then indexed so they can be explored."]),
+    (4, [("One Interface: ", True), "Overview, Explorer, Cases and Upload work on whichever dataset is selected, all through a validated REST API."]),
 ])
-notes(s, "Five parts: the batch pipeline, the fraud model, millisecond search, case management, and upload with batch scoring.")
+notes(s, "Five parts: the data platform with two ways in, the fraud model, millisecond search on every dataset, case management, and one interface over a REST API.")
 
 # ------------------------------------------------------------------ 9 results
 s = slides[8]
 cap1, cap2 = shape_named(s, "Google Shape;124;p9"), shape_named(s, "Google Shape;126;p9")
 note = next(sh for sh in s.shapes if sh.has_text_frame and sh.text_frame.text.startswith("★"))
 tables = [sh for sh in s.shapes if sh.has_table]
-set_first_run(cap1, 0, "Table 1: Model Comparison on the Held-out Test Set (831,437 transactions, 2,407 frauds)")
-set_first_run(cap2, 0, "Table 2: Time to Find All Transactions of One Account (6.36 million rows)")
+set_first_run(cap1, 0, "Table 1: Model Comparison on Held-out Test Data (831,437 transactions, 2,407 frauds)")
+set_first_run(cap2, 0, "Table 2: Platform Performance")
 edit_table(tables[0], [
     ["Model", "Precision", "Recall", "F1", "AUC-PR", "Frauds Caught", "False Alarms"],
     ["Logistic Regression (baseline)", "0.043", "0.909", "0.083", "0.549", "2,189 / 2,407", "48,466"],
     ["Random Forest (selected) ★", "0.993", "0.998", "0.995", "0.998", "2,401 / 2,407", "17"],
-    ["Dataset rule (isFlaggedFraud)", "1.000", "0.002", "0.003", "–", "4 / 2,407", "0"],
+    ["Existing rule-based flag", "1.000", "0.002", "0.003", "–", "4 / 2,407", "0"],
 ], col_widths_in=[2.5, 1.0, 0.9, 0.8, 1.0, 1.7, 1.4])
 edit_table(tables[1], [
-    ["Method", "Median", "95th Percentile", "Faster than Spark"],
-    ["Spark SQL scan of the data lake", "1,441 ms", "1,730 ms", "1×"],
-    ["DuckDB on the Parquet files", "276 ms", "329 ms", "5×"],
-    ["DuckDB table, no index", "28 ms", "35 ms", "51×"],
-    ["DuckDB table with index (used) ★", "2.5 ms", "2.8 ms", "574×"],
-], drop_col=4, col_widths_in=[3.4, 1.6, 1.9, 1.7])
+    ["Capability", "Measured", "Compared with"],
+    ["Account lookup with an index", "2.5 ms (median)", "Spark scan of the same data: 1,441 ms (574\u00d7 slower)"],
+    ["Suggestions while typing", "about 8 to 30 ms", "Up to 10 matching accounts per pause in typing"],
+    ["Scoring throughput", "426,000 rows/s", "38,000 rows/s without blocks and threads"],
+    ["Upload of an 8.0M-row file", "scored in about 30 s, indexed in about 42 s", "Streamed in 16 MB blocks; memory does not grow with file size"],
+    ["Automated tests", "144 passing", "Scoring matches Spark within 0.00005"],
+], drop_col=[3, 4], col_widths_in=[2.6, 2.9, 3.9])
 cap2.top = Inches(2.5)
 tables[1].top = Inches(2.85)
-set_first_run(note, 0, "★ Unseen generated files: 8.0M rows scored in about 30 s and indexed in about 42 s, finding 92.1% of frauds at 51.8% precision; "
-                       "the 7.0M-row unlabelled file was scored in about 35 s. 144 automated tests pass.")
-notes(s, "Table 1: the Random Forest finds 2,401 of 2,407 frauds with 17 false alarms; the baseline raises 48,466. Table 2: the indexed lookup is 574 times faster than a Spark scan. On unseen generated files recall stays high but precision drops to 51.8%, an honest result on a different dataset.")
+set_first_run(note, 0, "★ Model figures are on held-out benchmark data. On an unseen 8.0M-row uploaded file the model finds 92.1% of frauds at 51.8% precision, "
+                       "an honest result on a different dataset.")
+notes(s, "Table 1: the Random Forest finds 2,401 of 2,407 frauds with 17 false alarms; the baseline raises 48,466. Table 2 shows the platform: indexed lookup 574 times faster than a Spark scan, fast suggestions, high scoring throughput, and uploads of 8 million rows scored and indexed in about 70 seconds. On an unseen uploaded file recall stays high but precision drops to 51.8%.")
 
 # ------------------------------------------------------------------ 10 conclusion
 s = slides[9]
 box = shape_named(s, "Google Shape;135;p11")
 rewrite(box, [
-    (0, ["A Spark pipeline and a ", ("60-tree Random Forest", True), " find 99.75% of frauds with 99.3% precision on unseen test data, far above the dataset's own rule (0.2% recall)."]),
-    (1, ["An ", ("index", True), " makes account lookup 574 times faster than a Spark scan, so search and suggestions answer in milliseconds."]),
-    (2, ["Cases (CRUD) and ", ("streaming upload", True), " turn the model into an investigation tool; 8-million-row files are scored and explorable in about a minute."]),
+    (0, ["The platform takes transaction data from a ", ("Spark pipeline or a CSV upload", True), " to model scores, instant search and investigated cases in one system."]),
+    (1, ["A ", ("60-tree Random Forest", True), " finds 99.75% of frauds at 99.3% precision on held-out data and scores about 426,000 rows per second."]),
+    (2, [("Indexes", True), " make lookups 574 times faster than a Spark scan; uploads of 8 million rows are scored and explorable in about a minute."]),
     (3, ["Limits: simulated data, Spark in local mode, no login. Future work: ", ("streaming scoring, a cluster, authentication", True), " and per-transaction explanations."]),
 ])
 old_picture = next(sh for sh in s.shapes if sh.shape_type == 13)
 x, y, w = old_picture.left, old_picture.top, old_picture.width
 remove(old_picture, s)
-shot = os.path.join(ASSETS, "fig_overview_top.png")
+shot = os.path.join(ASSETS, "fig_cases.png")
 with Image.open(shot) as im:
     ratio = im.size[0] / im.size[1]
-s.shapes.add_picture(shot, x, y + Inches(0.5), w, int(w / ratio))
-notes(s, "Summarise: accurate model, instant search, a full case workflow and upload at scale. Be open about the limits: simulated data, local-mode Spark and no authentication.")
+s.shapes.add_picture(shot, x, y + Inches(0.1), w, int(w / ratio))
+notes(s, "Summarise: one platform from data to investigated case, an accurate model, instant search on every dataset, a full case workflow and upload at scale. Be open about the limits: simulated data, local-mode Spark and no authentication.")
 
 # ------------------------------------------------------------------ 11 references
 s = slides[10]
@@ -323,7 +324,7 @@ REFS = [
     ("[1] L. Breiman, “Random Forests,” ", "Machine Learning", ", vol. 45, no. 1, pp. 5–32, 2001."),
     ("[2] M. Zaharia ", "et al.", ", “Apache Spark: A Unified Engine for Big Data Processing,” Commun. ACM, vol. 59, no. 11, 2016."),
     ("[3] X. Meng ", "et al.", ", “MLlib: Machine Learning in Apache Spark,” J. Mach. Learn. Res., vol. 17, no. 34, 2016."),
-    ("[4] E. A. Lopez-Rojas, A. Elmir and S. Axelsson, “PaySim: A financial mobile money simulator for fraud detection,” ", "Proc. EMSS", ", 2016."),
+    ("[4] M. Stonebraker ", "et al.", ", “C-Store: A Column-oriented DBMS,” Proc. VLDB, 2005."),
     ("[5] N. V. Chawla ", "et al.", ", “SMOTE: Synthetic Minority Over-sampling Technique,” J. Artif. Intell. Res., vol. 16, 2002."),
     ("[6] T. Saito and M. Rehmsmeier, “The Precision-Recall Plot Is More Informative than the ROC Plot…,” ", "PLoS ONE", ", vol. 10, no. 3, 2015."),
     ("[7] M. Raasveldt and H. Muhleisen, “DuckDB: an Embeddable Analytical Database,” ", "Proc. ACM SIGMOD", ", 2019."),
@@ -333,6 +334,7 @@ REFS = [
     ("[11] MongoDB Documentation, Indexes (TTL and partial). ", "mongodb.com/docs/manual/indexes", ""),
     ("[12] FastAPI Documentation. ", "fastapi.tiangolo.com", ""),
     ("[13] DuckDB Documentation. ", "duckdb.org/docs", ""),
+    ("[14] E. A. Lopez-Rojas, A. Elmir and S. Axelsson, \u201cPaySim: A financial mobile money simulator for fraud detection\u201d (benchmark data), ", "Proc. EMSS", ", 2016."),
 ]
 specs = []
 for a_, b_, c_ in REFS:
@@ -346,7 +348,7 @@ for para in box.text_frame._txBody.findall("a:p", NS):
         r.find("a:rPr", NS).set("sz", "1200")
 box.left, box.top = Inches(0.45), Inches(0.95)
 box.width = Inches(9.1)
-notes(s, "Foundational papers for the model, the engine, the dataset, the evaluation and the index, plus the documentation of the tools used.")
+notes(s, "Foundational papers for the model, the engine, columnar storage, the evaluation and the index, the documentation of the tools used, and the benchmark data.")
 
 # ------------------------------------------------------------------ Times New Roman everywhere
 def force_font(element):
