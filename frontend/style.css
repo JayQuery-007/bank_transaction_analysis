@@ -117,3 +117,29 @@ a.acct { text-decoration: none; border-bottom: 1px dotted var(--accent); }
 @media (max-width: 800px) { .search-form { grid-template-columns: 1fr 1fr; } .kv { grid-template-columns: 1fr; } }
 
 [hidden] { display: none !important; }
+
+/* cases */
+.stats5 { grid-template-columns: repeat(5, 1fr); margin: 14px 0; }
+button.stat { text-align: left; background: var(--bg); cursor: pointer; font: inherit; color: inherit; }
+button.stat:hover { border-color: var(--accent); }
+button.stat.active { border-color: var(--accent); background: #eaf1f8; }
+.inline-form { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; margin: 12px 0; }
+.inline-form label { display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted); }
+.inline-form input, .inline-form select, .inline-form textarea, .filters input[type=search], .filters select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--text); background: var(--bg); }
+.inline-form textarea { min-width: 340px; flex: 1; }
+.filters input[type=search] { min-width: 280px; }
+.badge.s-new { background: #e7f0fb; border-color: #bcd3ee; color: #1f4e79; }
+.badge.s-investigating { background: #fff4e5; border-color: #f0d6a8; color: #8a5300; }
+.badge.s-confirmed_fraud { background: #fde8e7; border-color: #f3c0bc; color: #a12a1f; }
+.badge.s-false_positive { background: #e6f4ea; border-color: #bfdcc6; color: #1e6b34; }
+.badge.s-closed { background: var(--bg-alt); color: var(--muted); }
+.prio { font-weight: 600; font-size: 12.5px; }
+.prio.high { color: var(--fraud); } .prio.medium { color: #8a5300; } .prio.low { color: var(--muted); }
+button.danger { background: #fff; border-color: #e3a29b; color: var(--fraud); }
+button.danger:hover { background: var(--fraud); border-color: var(--fraud); color: #fff; }
+ul.notes { margin: 4px 0 10px; padding-left: 18px; font-size: 13.5px; }
+td.empty { text-align: center !important; color: var(--muted); padding: 22px; }
+.toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); display: flex; gap: 14px; align-items: center; padding: 10px 16px; border-radius: 8px; background: #1f2328; color: #fff; font-size: 14px; box-shadow: 0 4px 18px rgba(0,0,0,.25); z-index: 50; }
+.toast.error { background: var(--fraud); }
+.toast button { background: transparent; color: #fff; border-color: rgba(255,255,255,.6); }
+@media (max-width: 800px) { .stats5 { grid-template-columns: repeat(2, 1fr); } }

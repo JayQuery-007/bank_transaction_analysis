@@ -170,16 +170,24 @@ def _search_scan(cur, filters, fparams, sort, order, skip, limit):
     return items, total
 
 
-@router.get("/transactions/{tx_id}")
-def get_transaction(tx_id: int):
+def fetch_transaction(tx_id):
+    """One transaction with its model score, or None. Also used when a case is opened."""
     cur = _connection().cursor()
     started = time.perf_counter()
     rows = _rows(cur.execute(f"SELECT {', '.join(COLUMNS)} FROM transactions WHERE tx_id = ?", [tx_id]))
     took_ms = (time.perf_counter() - started) * 1000
     cur.close()
     if not rows:
-        raise HTTPException(404, f"Transaction {tx_id} not found")
+        return None
     return {**_score(rows)[0], "took_ms": round(took_ms, 2)}
+
+
+@router.get("/transactions/{tx_id}")
+def get_transaction(tx_id: int):
+    row = fetch_transaction(tx_id)
+    if row is None:
+        raise HTTPException(404, f"Transaction {tx_id} not found")
+    return row
 
 
 @router.get("/accounts/{account_id}")

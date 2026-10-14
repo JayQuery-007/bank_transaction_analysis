@@ -22,7 +22,51 @@ function describeError(detail, fallback) {
 async function api(path, options) {
   const res = await fetch(path, options);
   if (!res.ok) throw new Error(describeError((await res.json().catch(() => ({}))).detail, res.statusText));
-  return res.json();
+  return res.status === 204 ? null : res.json();
+}
+
+// Anonymous workspace id: random, kept in this browser, sent with every cases/uploads request so
+// visitors only see their own data. A header (not a cookie) because browsers block third-party
+// cookies when the page is embedded, e.g. in a Hugging Face Space.
+let memoryOwner = null;
+function ownerId() {
+  try {
+    let id = localStorage.getItem("bda_owner");
+    if (!/^[0-9a-f]{32}$/.test(id || "")) {
+      id = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("");
+      localStorage.setItem("bda_owner", id);
+    }
+    return id;
+  } catch (e) {
+    memoryOwner = memoryOwner || [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("");
+    return memoryOwner;
+  }
+}
+
+function apiAs(path, options = {}) {
+  const headers = { ...(options.headers || {}), "X-Owner": ownerId() };
+  if (options.body && !(options.body instanceof FormData)) headers["Content-Type"] = "application/json";
+  return api(path, { ...options, headers });
+}
+
+function toast(message, kind = "ok", action) {
+  let el = document.getElementById("toast");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "toast";
+    document.body.appendChild(el);
+  }
+  el.className = `toast ${kind}`;
+  el.innerHTML = `<span>${esc(message)}</span>`;
+  if (action) {
+    const b = document.createElement("button");
+    b.textContent = action.label;
+    b.onclick = () => { el.hidden = true; action.run(); };
+    el.appendChild(b);
+  }
+  el.hidden = false;
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => (el.hidden = true), kind === "error" ? 7000 : 4500);
 }
 
 // ---- tab navigation: #overview | #explorer | #cases | #upload ----

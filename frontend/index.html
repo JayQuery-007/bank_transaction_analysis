@@ -197,7 +197,38 @@
 
 </div>
 
-<div class="view" id="view-cases" hidden></div>
+<div class="view" id="view-cases" hidden>
+
+  <section>
+    <h2>Fraud cases</h2>
+    <p class="sub">Open a case from any transaction in the Explorer, move it through review, add notes, or delete it. Cases are stored in MongoDB and are private to this browser; cases left untouched for 7 days are removed automatically.</p>
+    <div id="casesBanner"></div>
+    <div class="stats stats5" id="caseStats"></div>
+
+    <form id="caseOpenForm" class="inline-form">
+      <label>Open a case for transaction id <input name="tx_id" type="number" min="1" step="1" required placeholder="e.g. 3610970"></label>
+      <label>Assignee <input name="assignee" maxlength="60" placeholder="optional"></label>
+      <button type="submit" class="primary">Open case</button>
+    </form>
+
+    <div class="filters">
+      <input id="caseQuery" type="search" placeholder="Search transaction id, account, assignee, note" maxlength="60">
+      <select id="caseStatusFilter">
+        <option value="">all statuses</option><option value="new">New</option><option value="investigating">Investigating</option>
+        <option value="confirmed_fraud">Confirmed fraud</option><option value="false_positive">False positive</option><option value="closed">Closed</option>
+      </select>
+      <select id="caseSort"><option value="updated_at">recently updated</option><option value="created_at">newest</option><option value="priority">priority</option></select>
+      <button type="button" id="caseRefresh">Refresh</button>
+      <span id="caseCount" class="note"></span>
+    </div>
+    <div class="scroll"><table id="caseTable" class="data small"></table></div>
+    <div class="pager" id="casePager" hidden>
+      <button id="casePrev">&larr; Previous</button><span id="casePageInfo"></span><button id="caseNext">Next &rarr;</button>
+    </div>
+    <div id="caseDetail"></div>
+  </section>
+
+</div>
 <div class="view" id="view-upload" hidden></div>
 
 </main>
@@ -208,5 +239,6 @@
 <script src="forest.js"></script>
 <script src="app.js"></script>
 <script src="explorer.js"></script>
+<script src="cases.js"></script>
 </body>
 </html>

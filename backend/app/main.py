@@ -2,12 +2,14 @@ from contextlib import asynccontextmanager
 from typing import Literal, Optional
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from pymongo.errors import PyMongoError
 
 from config import ROOT
 
-from . import forest, search, store
+from . import cases, db, forest, search, store
 
 
 @asynccontextmanager
@@ -18,6 +20,7 @@ async def lifespan(_app):
 
 app = FastAPI(title="Bank Transaction Analytics API", lifespan=lifespan)
 app.include_router(search.router)
+app.include_router(cases.router)
 
 RESULT_SETS = {
     "overview", "data_quality", "type_summary", "hourly", "daily", "amount_bands",
@@ -26,9 +29,15 @@ RESULT_SETS = {
 }
 
 
+@app.exception_handler(PyMongoError)
+async def mongo_unavailable(_request, exc):
+    return JSONResponse(status_code=503, content={
+        "detail": "The database is not reachable. Start MongoDB (start.ps1 does it on Windows) or check MONGO_URI."})
+
+
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "search_index": search.status()}
+    return {"status": "ok", "search_index": search.status(), "database": db.available()}
 
 
 @app.get("/api/source")
