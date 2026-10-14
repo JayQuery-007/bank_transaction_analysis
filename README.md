@@ -1,14 +1,18 @@
 # Bank Transaction Analytics and Fraud Detection
 
 Big Data Analytics coursework project. A batch pipeline that processes **6.36 million
-mobile-money transactions** with Apache Spark, finds where and when fraud happens, trains a
-fraud detection model with Spark MLlib, and serves the results from MongoDB to a web dashboard.
+mobile-money transactions** with Apache Spark, finds where and when fraud happens, and trains a
+fraud detection model with Spark MLlib. On top of the results sits a web application with
+**millisecond transaction search**, **fraud case management (full CRUD)** and **CSV upload with
+batch scoring**.
 
 **Stack:** Python + Apache Spark (Spark SQL, MLlib) + MongoDB + Machine Learning,
-with Parquet for storage and FastAPI for the dashboard API.
+with Parquet for storage, DuckDB for fast search and FastAPI for the API.
 
-**Live dashboard:** https://jayquery-007-bank-transaction-analytics.static.hf.space
-(hosted on [Hugging Face Spaces](https://huggingface.co/spaces/JayQuery-007/bank-transaction-analytics))
+**Live dashboard (read-only showcase):** https://jayquery-007-bank-transaction-analytics.static.hf.space
+(hosted on [Hugging Face Spaces](https://huggingface.co/spaces/JayQuery-007/bank-transaction-analytics)).
+The full application (search, cases, upload) needs a server and a database, so it runs locally
+(`python run.py`) or from the Docker image; see [Hosting](#hosting).
 
 ## Problem
 
@@ -62,15 +66,22 @@ in Africa. It is the standard public benchmark for transaction fraud detection.
      Spark SQL aggregations           Spark MLlib: Logistic Regression vs Random Forest
         |                                |
         +---------------+----------------+
-                        v
-                MongoDB (bank_analytics)        serving layer: one collection per result set
-                        |
-                        v
-                FastAPI (backend/app)  --->  dashboard (frontend/)
+        |               |                |
+        v               v                v
+ [4] serving/       MongoDB (bank_analytics)        results/*.json
+     build_search_  - result sets (read-only)        (committed copy of
+     index.py       - cases, upload batches           every result set)
+     DuckDB index     (read/write, per browser)
+        |               |
+        +-------+-------+
+                v
+        FastAPI (backend/app)  --->  dashboard (frontend/)
 ```
 
-The full 6.36M rows stay in the Parquet lake. MongoDB holds only the query results the
-dashboard needs: aggregates, model metrics and flagged transactions. This is the usual split
+The full 6.36M rows stay in the Parquet lake. MongoDB holds only what the application needs:
+the result sets, and the operational data users create (cases, upload batches). A DuckDB file
+(`data/search.duckdb`, 878 MB, built from the lake in about 40 s) indexes every transaction by
+sender, receiver and id, which is what makes search take milliseconds. This is the usual split
 between a batch layer and a serving layer.
 
 ### Pipeline steps
@@ -81,10 +92,67 @@ between a batch layer and a serving layer.
 | `spark_jobs/ingest.py` | reads the CSV with an explicit schema, checks nulls/duplicates/invalid amounts, renames columns, adds `day`, `hour_of_day`, balance-error and `orig_emptied` columns, writes Parquet partitioned by `type` | ~20 s |
 | `spark_jobs/analytics.py` | 7 Spark SQL queries (overview, type summary, hourly/daily activity, amount bands, balance patterns, repeat fraud destinations) published to MongoDB | ~25 s |
 | `spark_jobs/train_model.py` | trains and evaluates the models, computes feature importance and a threshold curve, saves the model and the flagged test transactions | ~2.5 min |
+| `serving/build_search_index.py` | reads the Parquet lake with DuckDB and writes `data/search.duckdb` with a deterministic `tx_id` and indexes on both account columns | ~40 s |
 
 \*On a 16 GB Windows laptop, Spark `local[*]`.
 
 `notebooks/eda.ipynb` contains the exploratory analysis behind these steps, with plots.
+
+## The application
+
+Three tabs sit next to the Overview (all need the server; the static site shows only the Overview).
+
+### Explorer: millisecond search over 6.36M transactions
+
+Look up an account (sender, receiver or either), or filter by type, amount, hour and fraud
+label, sort and page through results. Every row is scored by the fraud model and any transaction
+can be opened as a case. The tab also shows a benchmark of the same lookup done four ways,
+measured on a 16 GB Windows laptop (finding every transaction sent by one account):
+
+| Method | Median |
+|---|---|
+| Spark SQL, full scan of the Parquet lake | 1,441 ms |
+| DuckDB straight on the Parquet lake | 276 ms |
+| DuckDB table, index switched off | 28 ms |
+| **DuckDB table with the index (what the API uses)** | **2.5 ms** |
+
+The API itself answers an account lookup in about 4–6 ms. Rerun the benchmark with
+`python -m scripts.benchmark_search`. Two findings worth knowing: DuckDB's optimiser drops the
+index when the query has an `ORDER BY` (12x slower), so account searches fetch the few matching
+rows through the index and sort them in Python; and an `OR` across the two account columns is
+slower than two separate lookups, so they are done separately. All query values are bound
+parameters, and the only SQL text taken from a whitelist is the sort column.
+
+### Cases: create, read, update, delete
+
+An analyst opens a case from a transaction, moves it through a review workflow
+(`new` → `investigating` → `confirmed_fraud` / `false_positive` → `closed`), assigns it, adds
+notes and can delete it. Cases live in MongoDB with an audit history, and:
+
+- status changes are validated and applied in one atomic update, so two concurrent changes cannot both win;
+- there is at most one open case per transaction (a partial unique index);
+- user text is wrapped in `$literal` in pipeline updates, because without it a note such as `$status` would be evaluated as a field reference (a test proves this);
+- cases belong to an anonymous browser workspace (a random id kept in `localStorage`, sent as an `X-Owner` header; a header rather than a cookie because browsers block cookies in embedded pages), capped at 50 cases per workspace, and removed after 7 days without changes.
+
+CRUD applies to this operational data, not to the 6.36M-row lake: the lake is immutable
+analytical data that is rebuilt by the pipeline, and editing it in place would be the wrong
+architecture.
+
+### Upload: score your own file
+
+Upload a CSV in the dataset's format (up to 100,000 rows or 25 MB). Rows are validated (errors
+are listed with their real file row numbers and do not stop the upload), scored with the
+Random Forest, and summarised. If the file has an `isFraud` column the page reports precision,
+recall and a confusion matrix. The scored CSV can be downloaded for 24 hours; formula-like
+text in account names is neutralised so it cannot run when the CSV is opened in a spreadsheet.
+A 100,000-row file takes about 5 seconds end to end. A 500-row real sample is built in
+(`results/sample_upload.csv`); note the model saw about 70% of those rows during training, so
+its scores on the sample are optimistic.
+
+Scoring in the application uses the Random Forest exported from Spark's model files and
+evaluated with numpy (`backend/app/forest.py`), not Spark itself. It gives the same
+probabilities as Spark (tested on all 2,424 scored test transactions, maximum difference 0.00005)
+and means the server needs no Java.
 
 ## Findings
 
@@ -152,9 +220,13 @@ pip install -r requirements.txt
 python run.py
 ```
 
-Open http://localhost:8000. The dashboard reads from MongoDB if it's running on
-`localhost:27017` (override with `MONGO_URI`), otherwise from `results/*.json`.
-The "Check a transaction" section loads the Spark model, so it needs Java 17.
+Open http://localhost:8000. No Java is needed to run the dashboard. What works depends on what is present:
+
+| You have | You get |
+|---|---|
+| nothing extra | Overview (reads `results/*.json`) and the transaction scoring form |
+| MongoDB on `localhost:27017` (or `MONGO_URI`) | also Cases and Upload |
+| `data/search.duckdb` (built by the pipeline, not in Git) | also the Explorer |
 
 ### Full pipeline (rebuild everything from the raw data)
 
@@ -169,9 +241,43 @@ python run_pipeline.py
 Start MongoDB first if you want the results stored there. On Windows, `.\start.ps1` starts
 a local MongoDB from `.\mongodb\` (if present) and then the dashboard.
 
-### Deployment (Hugging Face Spaces)
+### Tests
 
-The live dashboard is a **static** Hugging Face Space, which is free and needs no server.
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+Over 110 tests: scorer parity with Spark's stored probabilities, search results checked against
+an independent pyarrow scan of the lake, SQL-injection and validation cases, the full cases
+lifecycle (including isolation between workspaces and the `$literal` protection), uploads
+(malformed rows, limits, formula injection, path traversal), the hosting download logic and the
+deploy script. Tests that need MongoDB or the lake skip themselves when those are missing, and
+MongoDB tests use their own throwaway database, never `bank_analytics`.
+
+### Hosting
+
+Two deployments, for different needs.
+
+**Full application on a Hugging Face Docker Space** (search, cases, upload). Needs a Hugging Face
+PRO subscription (Docker Spaces are not free) and a free MongoDB Atlas cluster. The image has no
+Java or Spark (about 280 MB of RAM at runtime) and downloads the search index from a dataset
+repo. One-time setup is described at the top of `deploy/deploy_space_app.py`. Your Atlas
+connection string stays in your own terminal and is stored as a Space secret by the script:
+
+```bash
+hf auth login
+$env:MONGO_URI = "mongodb+srv://..."          # PowerShell; your Atlas connection string
+python deploy/deploy_space_app.py --dry-run   # checks everything, changes nothing
+python deploy/deploy_space_app.py             # uploads the index and the app, waits for the build
+```
+
+The index is uploaded to a private dataset repo by default. Check the PaySim licence on Kaggle
+before using `--public-index`, because a public search over every row is a form of republishing.
+The anonymous workspaces, the caps on cases, uploads and notes, and the expiry of old data
+exist because the hosted site accepts writes from anyone.
+
+**Read-only showcase on a free static Space** (the live link above).
 `deploy/build_static.py` copies the frontend and `results/*.json` into `site/` and exports
 the trained Random Forest's 60 trees from Spark's model files to JSON. `frontend/forest.js`
 then scores transactions in the browser with the same logic as Spark MLlib. The build
@@ -183,9 +289,9 @@ hf auth login                   # one-time, signs in to Hugging Face
 python deploy/deploy_hf.py      # builds site/ and uploads it to the Space
 ```
 
-For a server-based deployment (FastAPI + Spark + MongoDB), the repo also has a
-`Dockerfile` (Python 3.11, Java 17, about 2 GB of RAM). It runs on any container host
-such as Render, Railway or a VM. Docker Spaces on Hugging Face need a paid plan.
+The static build hides the Explorer, Cases and Upload tabs, because they need a server.
+The `Dockerfile` also runs on any other container host (Render, Railway, a VM) with about 1 GB
+of RAM, the search index file and a `MONGO_URI`.
 
 ### Running Spark on Windows
 
@@ -199,8 +305,8 @@ on Windows with Python 3.12+.
 ## Project structure
 
 ```
-config.py                 paths and MongoDB settings
-run_pipeline.py           runs the 4 pipeline steps in order
+config.py                 paths and MongoDB / search index settings
+run_pipeline.py           runs the 5 pipeline steps in order
 run.py                    starts the dashboard
 data/download_data.py     Kaggle download
 spark_jobs/
@@ -209,11 +315,25 @@ spark_jobs/
   analytics.py            Spark SQL analytics
   train_model.py          Spark MLlib model training and evaluation
   winfs/                  Windows filesystem shim for Hadoop
+serving/
+  build_search_index.py   Parquet lake -> DuckDB search index
+  fetch_index.py          downloads the index from a Hugging Face dataset repo (hosted container)
+scripts/
+  benchmark_search.py     times one lookup four ways -> results/search_benchmark.json
+  make_sample_upload.py   builds results/sample_upload.csv
 notebooks/eda.ipynb       exploratory analysis
-backend/app/              FastAPI: results API + live prediction
-frontend/                 dashboard (HTML, CSS, Chart.js)
+backend/app/
+  main.py                 routes for results, scoring, health
+  forest.py               Spark's Random Forest evaluated with numpy
+  search.py               /api/search, /api/transactions, /api/accounts
+  cases.py, uploads.py    CRUD on cases, CSV upload and scoring
+  db.py                   MongoDB connection, indexes, anonymous workspace id
+  store.py                results from MongoDB or results/*.json
+frontend/                 dashboard (HTML, CSS, Chart.js): app.js, explorer.js, cases.js, upload.js, forest.js
+tests/                    pytest suite (over 110 tests)
+deploy/                   static site build + upload, Docker Space deploy script
 models/fraud_rf/          trained Random Forest (Spark ML format)
-results/                  pipeline output (also loaded into MongoDB)
+results/                  pipeline output (also loaded into MongoDB), sample upload file
 ```
 
 ## Limitations and future work
