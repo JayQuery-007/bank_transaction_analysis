@@ -20,7 +20,16 @@
   </div>
 </header>
 
+<nav class="tabs wrap" id="tabs">
+  <button data-view="overview" class="active">Overview</button>
+  <button data-view="explorer" data-server-only>Explorer</button>
+  <button data-view="cases" data-server-only>Cases</button>
+  <button data-view="upload" data-server-only>Upload</button>
+</nav>
+
 <main class="wrap">
+
+<div class="view" id="view-overview">
 
   <section>
     <h2>1. Dataset overview</h2>
@@ -102,7 +111,7 @@
 
   <section>
     <h2>7. Check a transaction</h2>
-    <p class="sub" id="predictNote">Scores a single transaction with the trained Random Forest. The first request starts Spark and takes a few seconds.</p>
+    <p class="sub" id="predictNote">Scores a single transaction with the trained Random Forest. Its 60 trees were trained in Spark MLlib and exported, so scoring is instant.</p>
     <div class="examples">
       Fill with:
       <button type="button" data-example="fraud">a fraud from the test set</button>
@@ -123,6 +132,74 @@
     <div id="predictResult"></div>
   </section>
 
+</div>
+
+<div class="view" id="view-explorer" hidden>
+
+  <section>
+    <h2>Transaction explorer</h2>
+    <p class="sub">Search all <span id="explorerRows">6.36 million</span> transactions. An account lookup uses an index on the sender and receiver columns, so it takes milliseconds. Every result is scored by the fraud model.</p>
+    <form id="searchForm" class="form search-form" autocomplete="off">
+      <label class="wide2">Account ID
+        <input name="account" placeholder="e.g. C1305486145 (customer) or M1979787155 (merchant)" maxlength="32" spellcheck="false">
+      </label>
+      <label>Account is the
+        <select name="role"><option value="any">sender or receiver</option><option value="sender">sender</option><option value="receiver">receiver</option></select>
+      </label>
+      <label>Type
+        <select name="type"><option value="">any</option><option>TRANSFER</option><option>CASH_OUT</option><option>CASH_IN</option><option>PAYMENT</option><option>DEBIT</option></select>
+      </label>
+      <label>Amount from<input name="min_amount" type="number" min="0" step="any"></label>
+      <label>Amount to<input name="max_amount" type="number" min="0" step="any"></label>
+      <label>Hour from<input name="hour_from" type="number" min="0" max="23"></label>
+      <label>Hour to<input name="hour_to" type="number" min="0" max="23"></label>
+      <label>Fraud label
+        <select name="fraud"><option value="">any</option><option value="true">fraud only</option><option value="false">legitimate only</option></select>
+      </label>
+      <label>Sort by
+        <select name="sort"><option value="tx_id">transaction id</option><option value="amount">amount</option><option value="step">time</option></select>
+      </label>
+      <label>Order
+        <select name="order"><option value="asc">ascending</option><option value="desc">descending</option></select>
+      </label>
+      <div class="form-actions">
+        <button type="submit" class="primary">Search</button>
+        <button type="button" id="searchReset">Reset</button>
+      </div>
+    </form>
+    <div class="examples">
+      Try:
+      <button type="button" data-search-example="fraudSender">a fraud sender</button>
+      <button type="button" data-search-example="mule">a repeat-fraud receiver</button>
+      <button type="button" data-search-example="merchant">a merchant</button>
+      <button type="button" data-search-example="bigFraud">large frauds (filter only)</button>
+    </div>
+    <div id="searchStatus" class="search-status" hidden></div>
+    <div id="accountCard"></div>
+    <div class="scroll"><table id="searchTable" class="data small"></table></div>
+    <div class="pager" id="searchPager" hidden>
+      <button id="searchPrev">&larr; Previous</button>
+      <span id="searchPageInfo"></span>
+      <button id="searchNext">Next &rarr;</button>
+    </div>
+    <div id="txDetail"></div>
+  </section>
+
+  <section>
+    <h2>How fast is it?</h2>
+    <p class="sub" id="benchIntro"></p>
+    <div class="cols">
+      <div class="chart-box"><canvas id="benchChart"></canvas></div>
+      <table id="benchTable" class="data"></table>
+    </div>
+    <p class="note" id="benchNote"></p>
+  </section>
+
+</div>
+
+<div class="view" id="view-cases" hidden></div>
+<div class="view" id="view-upload" hidden></div>
+
 </main>
 
 <footer class="wrap">Big Data Analytics coursework &middot; Python, Apache Spark, MongoDB, Machine Learning</footer>
@@ -130,5 +207,6 @@
 <script src="config.js"></script>
 <script src="forest.js"></script>
 <script src="app.js"></script>
+<script src="explorer.js"></script>
 </body>
 </html>

@@ -22,3 +22,7 @@ derby.log
 
 # static build output (deploy/build_static.py)
 site/
+
+# DuckDB search index (rebuilt by run_pipeline.py)
+data/search.duckdb*
+data/*.building*

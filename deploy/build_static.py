@@ -13,76 +13,23 @@ import shutil
 import sys
 from pathlib import Path
 
-import pyarrow.parquet as pq
-
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from config import MODEL_DIR, RESULTS_DIR  # noqa: E402
+from backend.app.forest import export_forest, feature_matrix, fraud_probability  # noqa: E402
+from config import RESULTS_DIR  # noqa: E402
 
 SITE = ROOT / "site"
-FEATURES = [
-    "is_transfer", "amount", "old_balance_orig", "new_balance_orig", "old_balance_dest",
-    "new_balance_dest", "error_balance_orig", "error_balance_dest", "hour_of_day",
-]
 
 
-def export_forest():
-    """Spark RF data -> per-tree arrays indexed by node id."""
-    stage = next(MODEL_DIR.glob("stages/*RandomForestClassifier*"))
-    rows = pq.read_table(next((stage / "data").glob("*.parquet"))).to_pylist()
-
-    trees = {}
-    for row in rows:
-        trees.setdefault(row["treeID"], []).append(row["nodeData"])
-
-    out = []
-    for tree_id in sorted(trees):
-        nodes = sorted(trees[tree_id], key=lambda n: n["id"])
-        assert [n["id"] for n in nodes] == list(range(len(nodes)))
-        f, t, left, right, p = [], [], [], [], []
-        for n in nodes:
-            leaf = n["leftChild"] == -1
-            split = n["split"]
-            if not leaf:
-                assert split["numCategories"] == -1  # all features are continuous
-            stats = n["impurityStats"]
-            f.append(-1 if leaf else split["featureIndex"])
-            t.append(0 if leaf else split["leftCategoriesOrThreshold"][0])
-            left.append(n["leftChild"])
-            right.append(n["rightChild"])
-            p.append(stats[1] / sum(stats) if leaf else 0)
-        out.append({"f": f, "t": t, "l": left, "r": right, "p": p})
-    return {"features": FEATURES, "trees": out}
-
-
-def features_of(tx):
-    return [
-        1 if tx["type"] == "TRANSFER" else 0,
-        tx["amount"],
-        tx["old_balance_orig"],
-        tx["new_balance_orig"],
-        tx["old_balance_dest"],
-        tx["new_balance_dest"],
-        tx["new_balance_orig"] + tx["amount"] - tx["old_balance_orig"],
-        tx["old_balance_dest"] + tx["amount"] - tx["new_balance_dest"],
-        tx["hour_of_day"],
-    ]
-
-
-def fraud_probability(forest, x):
-    # same as Spark: each tree contributes its leaf's class distribution; average them
-    total = 0.0
-    for tree in forest["trees"]:
-        i = 0
-        while tree["f"][i] != -1:
-            i = tree["l"][i] if x[tree["f"][i]] <= tree["t"][i] else tree["r"][i]
-        total += tree["p"][i]
-    return total / len(forest["trees"])
-
-
-def validate(forest):
+def validate():
     rows = json.loads((RESULTS_DIR / "flagged_transactions.json").read_text())
-    worst = max(abs(fraud_probability(forest, features_of(r)) - r["fraud_probability"]) for r in rows)
+    x = feature_matrix(
+        [1 if r["type"] == "TRANSFER" else 0 for r in rows], [r["amount"] for r in rows],
+        [r["old_balance_orig"] for r in rows], [r["new_balance_orig"] for r in rows],
+        [r["old_balance_dest"] for r in rows], [r["new_balance_dest"] for r in rows],
+        [r["hour_of_day"] for r in rows],
+    )
+    worst = max(abs(fraud_probability(x) - [r["fraud_probability"] for r in rows]))
     print(f"Checked {len(rows)} test transactions against Spark: max difference {worst:.6f}")
     if worst > 1e-4:  # Spark's values were stored rounded to 4 decimals
         sys.exit("Exported forest does not match Spark's predictions")
@@ -90,7 +37,7 @@ def validate(forest):
 
 def main():
     forest = export_forest()
-    validate(forest)
+    validate()
 
     SITE.mkdir(exist_ok=True)
     for old in SITE.iterdir():

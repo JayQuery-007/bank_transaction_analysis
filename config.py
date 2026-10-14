@@ -7,8 +7,9 @@ RAW_CSV = ROOT / "data" / "raw" / "paysim.csv"
 LAKE_DIR = ROOT / "data" / "lake" / "transactions"
 MODEL_DIR = ROOT / "models" / "fraud_rf"
 RESULTS_DIR = ROOT / "results"
+SEARCH_DB = Path(os.environ.get("SEARCH_DB", ROOT / "data" / "search.duckdb"))
 
 KAGGLE_DATASET = "ealaxi/paysim1"
 
 MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017")
-MONGO_DB = "bank_analytics"
+MONGO_DB = os.environ.get("MONGO_DB", "bank_analytics")

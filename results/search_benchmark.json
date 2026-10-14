@@ -1,0 +1,52 @@
+[
+ {
+  "query": "all transactions sent by one account (name_orig = ?)",
+  "rows_searched": 6362604,
+  "accounts_tested": 30,
+  "engines": [
+   {
+    "name": "Spark SQL",
+    "method": "full scan of the Parquet lake",
+    "runs": 5,
+    "median_ms": 1441.16,
+    "p95_ms": 1729.82,
+    "max_ms": 3320.52,
+    "slowdown_vs_index": 574.2
+   },
+   {
+    "name": "DuckDB on Parquet",
+    "method": "scan of the Parquet lake, no table or index",
+    "runs": 10,
+    "median_ms": 276.13,
+    "p95_ms": 328.87,
+    "max_ms": 1092.06,
+    "slowdown_vs_index": 110.0
+   },
+   {
+    "name": "DuckDB table, index off",
+    "method": "columnar scan of the indexed table",
+    "runs": 30,
+    "median_ms": 28.36,
+    "p95_ms": 34.84,
+    "max_ms": 40.39,
+    "slowdown_vs_index": 11.3
+   },
+   {
+    "name": "DuckDB table, ART index",
+    "method": "index lookup (what the search API uses)",
+    "runs": 30,
+    "median_ms": 2.51,
+    "p95_ms": 2.78,
+    "max_ms": 3.0,
+    "slowdown_vs_index": 1.0
+   }
+  ],
+  "environment": {
+   "generated_at": "2026-10-14 08:30 UTC",
+   "cpu_threads": 24,
+   "os": "Windows-11-10.0.26300-SP0",
+   "python": "3.13.3",
+   "duckdb": "1.5.6"
+  }
+ }
+]

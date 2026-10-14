@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from typing import Literal, Optional
 
 from fastapi import FastAPI, HTTPException, Query
@@ -6,15 +7,28 @@ from pydantic import BaseModel, Field
 
 from config import ROOT
 
-from . import predict, store
+from . import forest, search, store
 
-app = FastAPI(title="Bank Transaction Analytics API")
+
+@asynccontextmanager
+async def lifespan(_app):
+    search.warm_up()
+    yield
+
+
+app = FastAPI(title="Bank Transaction Analytics API", lifespan=lifespan)
+app.include_router(search.router)
 
 RESULT_SETS = {
     "overview", "data_quality", "type_summary", "hourly", "daily", "amount_bands",
     "balance_patterns", "repeat_fraud_destinations", "model_metrics", "model_info",
-    "feature_importance", "threshold_curve",
+    "feature_importance", "threshold_curve", "search_benchmark",
 }
+
+
+@app.get("/api/health")
+def health():
+    return {"status": "ok", "search_index": search.status()}
 
 
 @app.get("/api/source")
@@ -51,10 +65,7 @@ class Transaction(BaseModel):
 
 @app.post("/api/predict")
 def predict_transaction(tx: Transaction):
-    try:
-        return predict.score(tx.model_dump())
-    except SystemExit as e:  # raised by get_spark() when Java is missing
-        raise HTTPException(503, str(e))
+    return forest.score_one(tx.model_dump())
 
 
 app.mount("/", StaticFiles(directory=ROOT / "frontend", html=True), name="frontend")

@@ -14,11 +14,40 @@ const pct = (n, digits = 2) => Number(n).toFixed(digits) + "%";
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const $ = (id) => document.getElementById(id);
 
+function describeError(detail, fallback) {
+  if (Array.isArray(detail)) return detail.map((d) => `${(d.loc || []).slice(1).join(".")}: ${d.msg}`).join("; ");
+  return detail || fallback;
+}
+
 async function api(path, options) {
   const res = await fetch(path, options);
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+  if (!res.ok) throw new Error(describeError((await res.json().catch(() => ({}))).detail, res.statusText));
   return res.json();
 }
+
+// ---- tab navigation: #overview | #explorer | #cases | #upload ----
+const views = {}; // each view script registers { show() }, called the first time its tab opens
+const shown = new Set();
+
+function showView(name) {
+  const tab = document.querySelector(`#tabs button[data-view="${name}"]`);
+  if (!tab || tab.hidden) name = "overview";
+  document.querySelectorAll(".view").forEach((v) => (v.hidden = v.id !== `view-${name}`));
+  document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.view === name));
+  if (!shown.has(name)) {
+    shown.add(name);
+    if (views[name] && views[name].show) views[name].show();
+  }
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+  if (window.STATIC_SITE) document.querySelectorAll("[data-server-only]").forEach((b) => (b.hidden = true));
+  document.getElementById("tabs").addEventListener("click", (e) => {
+    if (e.target.dataset && e.target.dataset.view) location.hash = e.target.dataset.view;
+  });
+  window.addEventListener("hashchange", () => showView(location.hash.slice(1)));
+  showView(location.hash.slice(1));
+});
 
 // Server mode reads the FastAPI backend; the static build (deploy/build_static.py)
 // reads the same result files directly and scores transactions in the browser.
@@ -275,12 +304,9 @@ async function main() {
   const r = Object.fromEntries(names.map((n, i) => [n, results[i]]));
 
   $("source").textContent = src;
-  if (window.STATIC_SITE) {
-    $("serving").textContent = "static site, Random Forest exported from Spark and run in the browser";
-    $("predictNote").textContent =
-      "Scores a single transaction with the trained Random Forest. Its 60 trees were exported from Spark MLlib " +
-      "and run here in your browser; they give the same probabilities as Spark.";
-  }
+  $("serving").textContent = window.STATIC_SITE
+    ? "static site, Random Forest exported from Spark and run in the browser"
+    : "MongoDB + DuckDB + FastAPI";
   renderOverview(r.overview[0], r.data_quality[0]);
   renderTypes(r.type_summary, r.overview[0]);
   renderHourly(r.hourly);

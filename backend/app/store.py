@@ -30,7 +30,10 @@ def source():
 def get(name):
     db = _mongo_db()
     if db is not None:
-        return list(db[name].find({}, {"_id": 0}))
+        docs = list(db[name].find({}, {"_id": 0}))
+        if docs:
+            return docs
+        # a result set added after MongoDB was last loaded is still available from results/
     path = RESULTS_DIR / f"{name}.json"
     if not path.exists():
         return []

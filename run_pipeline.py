@@ -1,4 +1,4 @@
-"""Runs the full batch pipeline: download -> ingest -> analytics -> model.
+"""Runs the full batch pipeline: download -> ingest -> analytics -> model -> search index.
 
 Usage: python run_pipeline.py
 """
@@ -11,6 +11,7 @@ STEPS = [
     ("Ingest CSV into Parquet data lake", [sys.executable, "-m", "spark_jobs.ingest"]),
     ("Spark SQL analytics -> MongoDB", [sys.executable, "-m", "spark_jobs.analytics"]),
     ("Train and evaluate fraud model (Spark MLlib)", [sys.executable, "-m", "spark_jobs.train_model"]),
+    ("Build the transaction search index (DuckDB)", [sys.executable, "-m", "serving.build_search_index"]),
 ]
 
 for label, cmd in STEPS:
