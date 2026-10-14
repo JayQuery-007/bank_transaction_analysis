@@ -110,7 +110,6 @@ milliseconds); pick one with the mouse or the arrow keys and Enter to see everyt
 scored by the fraud model and any transaction can be opened as a case. The API still accepts the extra filters (type,
 amount, hour, fraud label, sort) on `/api/search`. The page no longer shows the speed comparison, but the same lookup
 was measured four ways on a 16 GB Windows laptop (finding every transaction sent by one account):
-measured on a 16 GB Windows laptop (finding every transaction sent by one account):
 
 | Method | Median |
 |---|---|
