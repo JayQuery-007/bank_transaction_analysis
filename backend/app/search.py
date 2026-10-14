@@ -242,6 +242,34 @@ def fetch_transaction(tx_id, dataset="paysim", owner=None):
     return {**(rows if target.stored_scores else _score(rows))[0], "took_ms": round(took_ms, 2)}
 
 
+def _prefix_end(prefix):
+    """Smallest string greater than every string that starts with prefix (for an index range scan)."""
+    return prefix[:-1] + chr(ord(prefix[-1]) + 1)
+
+
+@router.get("/account-suggestions")
+def account_suggestions(
+    prefix: str = Query(..., description="The first characters of an account id"),
+    limit: int = Query(10, ge=1, le=20),
+    dataset: str = Query("paysim"),
+    x_owner: Optional[str] = Header(None),
+):
+    """Accounts whose id starts with prefix, in id order: range scans on the two account indexes."""
+    prefix = prefix.strip().upper()
+    if not ACCOUNT_RE.match(prefix):
+        raise HTTPException(422, "prefix must be 1-32 letters, digits, '_' or '-'")
+    cur = _target(dataset, x_owner).con.cursor()
+    started = time.perf_counter()
+    found = set()
+    for column in ("name_orig", "name_dest"):
+        rows = cur.execute(f"SELECT {column} FROM transactions WHERE {column} >= ? AND {column} < ? LIMIT ?",
+                           [prefix, _prefix_end(prefix), limit * 3]).fetchall()
+        found.update(r[0] for r in rows)
+    cur.close()
+    items = sorted(found)[:limit]
+    return {"prefix": prefix, "items": items, "took_ms": round((time.perf_counter() - started) * 1000, 2)}
+
+
 @router.get("/transactions/{tx_id}")
 def get_transaction(tx_id: int, dataset: str = "paysim", x_owner: Optional[str] = Header(None)):
     row = fetch_transaction(tx_id, dataset, x_owner)

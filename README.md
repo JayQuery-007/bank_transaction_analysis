@@ -104,9 +104,12 @@ Three tabs sit next to the Overview (all need the server; the static site shows 
 
 ### Explorer: millisecond search over 6.36M transactions
 
-Look up an account (sender, receiver or either), or filter by type, amount, hour and fraud
-label, sort and page through results. Every row is scored by the fraud model and any transaction
-can be opened as a case. The tab also shows a benchmark of the same lookup done four ways,
+The Explorer page is a single account ID box. Typing shows matching accounts in a drop-down (up to 10, in id
+order, via `GET /api/account-suggestions?prefix=C1305`, a range scan on the two account indexes, a few
+milliseconds); pick one with the mouse or the arrow keys and Enter to see everything it sent and received. Every row is
+scored by the fraud model and any transaction can be opened as a case. The API still accepts the extra filters (type,
+amount, hour, fraud label, sort) on `/api/search`. The page no longer shows the speed comparison, but the same lookup
+was measured four ways on a 16 GB Windows laptop (finding every transaction sent by one account):
 measured on a 16 GB Windows laptop (finding every transaction sent by one account):
 
 | Method | Median |

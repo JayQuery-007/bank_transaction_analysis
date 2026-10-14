@@ -30,12 +30,8 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
   }
 
   function readForm() {
-    const query = {};
-    for (const [k, v] of new FormData(form).entries()) {
-      const value = String(v).trim();
-      if (value !== "") query[k] = k === "account" ? value.toUpperCase() : value;
-    }
-    return query;
+    const account = form.elements.account.value.trim().toUpperCase();
+    return account ? { account } : {};
   }
 
   function fillForm(values) {
@@ -130,11 +126,87 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
     window.explorer.onDetail.forEach((fn) => fn(row, $("txActions")));
   }
 
+
+  // ---- account suggestions while typing ----
+  const input = form.elements.account;
+  const list = $("accountList");
+  let suggestions = [], activeIndex = -1, suggestTimer = null, suggestSeq = 0;
+
+  function hideSuggestions() {
+    clearTimeout(suggestTimer);
+    suggestSeq += 1; // a late answer must not reopen the list
+    list.hidden = true;
+    input.setAttribute("aria-expanded", "false");
+    suggestions = [];
+    activeIndex = -1;
+  }
+
+  function showSuggestions(prefix, items) {
+    suggestions = items;
+    activeIndex = -1;
+    list.innerHTML = items.length
+      ? items.map((id, i) => `<li role="option" data-i="${i}"><b>${esc(id.slice(0, prefix.length))}</b>${esc(id.slice(prefix.length))}</li>`).join("")
+      : `<li class="empty">No account starts with ${esc(prefix)}</li>`;
+    list.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+  }
+
+  function highlight(i) {
+    activeIndex = i;
+    list.querySelectorAll("li").forEach((li, n) => li.classList.toggle("active", n === i));
+    const li = list.querySelector("li.active");
+    if (li) li.scrollIntoView({ block: "nearest" });
+  }
+
+  function choose(id) {
+    input.value = id;
+    hideSuggestions();
+    search();
+  }
+
+  async function fetchSuggestions() {
+    const prefix = input.value.trim().toUpperCase();
+    if (!prefix || !/^[A-Z0-9_-]{1,32}$/.test(prefix)) return hideSuggestions();
+    const seq = ++suggestSeq;
+    try {
+      const q = datasets.withDataset(new URLSearchParams({ prefix, limit: 10 }));
+      const res = await datasets.call(`/api/account-suggestions?${q}`);
+      if (seq === suggestSeq) showSuggestions(prefix, res.items);
+    } catch (err) {
+      if (seq === suggestSeq) hideSuggestions();
+    }
+  }
+
+  input.addEventListener("input", () => {
+    clearTimeout(suggestTimer);
+    suggestTimer = setTimeout(fetchSuggestions, 120);
+  });
+  input.addEventListener("keydown", (e) => {
+    if (list.hidden || !suggestions.length) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); highlight((activeIndex + 1) % suggestions.length); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); highlight((activeIndex - 1 + suggestions.length) % suggestions.length); }
+    else if (e.key === "Enter" && activeIndex >= 0) { e.preventDefault(); choose(suggestions[activeIndex]); }
+    else if (e.key === "Escape") hideSuggestions();
+  });
+  input.addEventListener("blur", () => setTimeout(hideSuggestions, 150));
+  list.addEventListener("mousedown", (e) => { // before the input loses focus
+    const li = e.target.closest("li[data-i]");
+    if (li) { e.preventDefault(); choose(suggestions[Number(li.dataset.i)]); }
+  });
+
   // ---- events ----
+  function search() {
+    state.query = readForm();
+    if (!state.query.account) {
+      status("Enter an account ID to search, or pick one of the examples below.", true);
+      return;
+    }
+    run(0);
+  }
   form.addEventListener("submit", (e) => {
     e.preventDefault();
-    state.query = readForm();
-    run(0);
+    hideSuggestions();
+    search();
   });
   $("searchReset").addEventListener("click", () => {
     form.reset();
@@ -173,37 +245,42 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
     window.scrollTo({ top: $("searchForm").offsetTop - 20, behavior: "smooth" });
   });
 
+  // each example finds a real account in the selected dataset
+  const pick = async (params, side) => {
+    const find = async (skip) => {
+      const q = datasets.withDataset(new URLSearchParams({ limit: 1, skip, ...params }));
+      return (await datasets.call(`/api/search?${q}`)).items;
+    };
+    // vary the account between clicks; fall back to the first match when there are fewer matches than that
+    let items = await find(params.skip === undefined ? (exampleClicks * 7) % 50 : params.skip);
+    if (!items.length) items = await find(0);
+    if (!items.length) throw new Error("this dataset has no such account");
+    return { account: items[0][side] };
+  };
   const EXAMPLES = {
-    // examples for an uploaded file
-    async topRisk() { return { flagged: "true", sort: "fraud_probability", order: "desc" }; },
-    async bigFlagged() { return { flagged: "true", sort: "amount", order: "desc" }; },
-    async missed() { return { fraud: "true", flagged: "false" }; },
-    async falseAlarm() { return { fraud: "false", flagged: "true", sort: "fraud_probability", order: "desc" }; },
-    // examples for PaySim
-    async fraudSender() {
+    // uploaded files
+    topRisk: () => pick({ flagged: "true", sort: "fraud_probability", order: "desc" }, "name_orig"),
+    bigFlagged: () => pick({ flagged: "true", sort: "amount", order: "desc" }, "name_dest"),
+    missed: () => pick({ fraud: "true", flagged: "false" }, "name_orig"),
+    falseAlarm: () => pick({ fraud: "false", flagged: "true", sort: "fraud_probability", order: "desc" }, "name_orig"),
+    // main ledger
+    fraudSender() {
       const skips = [0, 40, 120, 300];
-      const r = await api(`/api/search?fraud=true&type=TRANSFER&limit=1&skip=${skips[exampleClicks % skips.length]}`);
-      return { account: r.items[0].name_orig, role: "sender" };
+      return pick({ fraud: "true", type: "TRANSFER", skip: skips[exampleClicks % skips.length] }, "name_orig");
     },
     async mule() {
       const mules = await data.result("repeat_fraud_destinations");
-      return { account: mules[exampleClicks % mules.length].name_dest, role: "receiver" };
+      return { account: mules[exampleClicks % mules.length].name_dest };
     },
-    async merchant() {
-      const r = await api(`/api/search?type=PAYMENT&limit=1&skip=${1000 * (exampleClicks + 1)}`);
-      return { account: r.items[0].name_dest, role: "receiver" };
-    },
-    async bigFraud() {
-      return { fraud: "true", type: "TRANSFER", min_amount: "5000000", sort: "amount", order: "desc" };
-    },
+    merchant: () => pick({ type: "PAYMENT", skip: 1000 * (exampleClicks + 1) }, "name_dest"),
   };
   document.querySelectorAll("[data-search-example]").forEach((b) => b.addEventListener("click", async () => {
     try {
       const values = await EXAMPLES[b.dataset.searchExample]();
       exampleClicks += 1;
       fillForm(values);
-      state.query = readForm();
-      run(0);
+      hideSuggestions();
+      search();
     } catch (err) {
       status(`Could not load an example: ${esc(err.message)}`, true);
     }
@@ -225,15 +302,12 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
   function applyDataset() {
     const up = datasets.isUpload();
     form.querySelectorAll("input, select, button").forEach((el) => (el.disabled = false));
-    document.querySelectorAll("#view-explorer [data-upload-only]").forEach((el) => (el.hidden = !up));
-    form.elements.fraud.closest("label").hidden = up && !datasets.current.labelled; // no labels, nothing to filter on
     $("examplesPaysim").hidden = up;
     $("examplesUpload").hidden = !up;
     document.querySelectorAll("#examplesUpload [data-needs-labels]").forEach((b) => (b.hidden = !datasets.current.labelled));
     $("explorerIntro").innerHTML = up
-      ? `Search <b>${esc(datasets.current.name)}</b> (${num(datasets.current.rows)} rows). An account lookup uses an index built when the file was uploaded, ` +
-        `so it takes milliseconds. Every row was scored by the fraud model when the file was processed, so you can filter on the model's verdict ` +
-        `and sort by its score.`
+      ? `Look up an account in <b>${esc(datasets.current.name)}</b> (${num(datasets.current.rows)} rows). Start typing and matching accounts appear; ` +
+        `pick one to see everything it sent and received, with the model's score for each transaction.`
       : PAYSIM_INTRO;
     resetResults();
   }

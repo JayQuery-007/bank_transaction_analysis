@@ -116,6 +116,17 @@ a.acct { text-decoration: none; border-bottom: 1px dotted var(--accent); }
 .kv dd { margin: 0; }
 @media (max-width: 800px) { .search-form { grid-template-columns: 1fr 1fr; } .kv { grid-template-columns: 1fr; } }
 
+.account-search { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.account-search label { width: 100%; font-size: 13px; color: var(--muted); margin-bottom: -4px; }
+.combo { position: relative; flex: 1 1 380px; max-width: 560px; }
+.combo input { width: 100%; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--text); }
+.combo ul { position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 2px); margin: 0; padding: 4px 0; list-style: none;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12); max-height: 320px; overflow-y: auto; }
+.combo li { padding: 6px 12px; cursor: pointer; font-variant-numeric: tabular-nums; }
+.combo li.active, .combo li:hover { background: #eaf1f8; }
+.combo li b { color: var(--accent); }
+.combo li.empty { color: var(--muted); cursor: default; }
+.combo li.empty:hover { background: none; }
 .stat .hint { color: var(--muted); font-size: 11.5px; line-height: 1.35; margin-top: 2px; }
 
 [hidden] { display: none !important; }

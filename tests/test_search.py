@@ -134,3 +134,25 @@ def test_account_lookup_is_fast_once_warm(client):
 
 def test_health_reports_the_index(client):
     assert client.get("/api/health").json()["search_index"]["rows"] == 6_362_604
+
+
+def test_account_suggestions_start_with_the_prefix_and_are_sorted(client):
+    r = client.get("/api/account-suggestions", params={"prefix": "c13054"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["prefix"] == "C13054" and 0 < len(body["items"]) <= 10
+    assert all(a.startswith("C13054") for a in body["items"]) and body["items"] == sorted(set(body["items"]))
+    cur = search._connection().cursor()
+    for account in body["items"]:  # every suggestion is a real account
+        assert cur.execute("SELECT count(*) FROM transactions WHERE name_orig = ? OR name_dest = ?", [account, account]).fetchone()[0] > 0
+
+
+def test_suggestions_include_receivers_and_respect_the_limit(client):
+    merchant = client.get("/api/account-suggestions", params={"prefix": "M19", "limit": 5}).json()
+    assert 0 < len(merchant["items"]) <= 5 and all(a.startswith("M19") for a in merchant["items"])
+
+
+def test_suggestions_for_an_unknown_prefix_are_empty_and_bad_input_is_rejected(client):
+    assert client.get("/api/account-suggestions", params={"prefix": "ZZZZ"}).json()["items"] == []
+    for bad in ["", "C1'; DROP TABLE transactions;--", "a" * 33, "C 1"]:
+        assert client.get("/api/account-suggestions", params={"prefix": bad}).status_code == 422
