@@ -21,8 +21,8 @@ FONT = "Times New Roman"
 TEXT_WIDTH_CM = 16.0
 
 TITLE = "Bank Transaction Analytics and Fraud Detection"
-AUTHORS = ["[Student Name 1]", "[Student Name 2]"]  # fill in before submitting
-SUPERVISOR = "[Supervisor Name]"
+AUTHORS = ["Jay Dhake  (A \u2013 07)", "Samarth Ghanekar  (A \u2013 10)", "Saahir Joshi  (A \u2013 16)"]
+SUPERVISOR = "Prof. Mrunali Desai"
 YEAR = "2026-27"
 
 import json
@@ -244,7 +244,7 @@ def footer_page_numbers():
     para.alignment = WD_ALIGN_PARAGRAPH.CENTER
     for kind, text in (("begin", None), (None, "PAGE"), ("end", None)):
         run = para.add_run()
-        run.font.name = "Arial"
+        run.font.name = FONT
         run.font.size = Pt(11)
         if kind:
             el = OxmlElement("w:fldChar")
@@ -269,9 +269,9 @@ P(TITLE, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, size=24, after=22)
 P("TY Mini Project Report", bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, size=14, after=8)
 P("by", align=WD_ALIGN_PARAGRAPH.CENTER, size=12, after=10)
 for a in AUTHORS:
-    P(a, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, after=10, highlight=a.startswith("["))
+    P(a, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, after=10)
 P("Supervisor", align=WD_ALIGN_PARAGRAPH.CENTER, after=6)
-P(SUPERVISOR, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, size=11, after=28, highlight=SUPERVISOR.startswith("["))
+P(SUPERVISOR, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, size=11, after=28)
 para = doc.add_paragraph()
 para.alignment = WD_ALIGN_PARAGRAPH.CENTER
 para.paragraph_format.space_after = Pt(16)
@@ -562,16 +562,11 @@ P("**Case management.** Cases can be created, listed, filtered, edited, annotate
 
 section("4.2 Screenshots")
 figure("fig_overview_top.png", "Fig 4.1 Overview: dataset summary and fraud by transaction type")
-figure("fig_hours.png", "Fig 4.2 Fraud and transaction volume by hour of the day")
-figure("fig_balance.png", "Fig 4.3 Behaviour of fraudulent transactions and receivers of repeated fraud")
-figure("fig_model.png", "Fig 4.4 Model comparison, confusion matrix, feature importance and threshold curve")
-figure("fig_flagged.png", "Fig 4.5 Flagged transactions of the test set with their outcome")
-figure("fig_predict.png", "Fig 4.6 Scoring a single transaction")
-figure("fig_suggestions.png", "Fig 4.7 Explorer: matching accounts appear while the account id is typed")
-figure("fig_explorer.png", "Fig 4.8 Explorer: account summary, transactions and transaction detail with the model score")
-figure("fig_cases.png", "Fig 4.9 Case management: list, status counts and the detail of a case being worked")
-figure("fig_upload.png", "Fig 4.10 Upload: result of scoring an 8-million-row file with accuracy against its labels")
-figure("fig_upload_overview.png", "Fig 4.11 Overview computed for the uploaded file")
+figure("fig_model.png", "Fig 4.2 Model comparison, confusion matrix, feature importance and threshold curve")
+figure("fig_suggestions.png", "Fig 4.3 Explorer: matching accounts appear while the account id is typed")
+figure("fig_explorer.png", "Fig 4.4 Explorer: account summary, transactions and transaction detail with the model score")
+figure("fig_cases.png", "Fig 4.5 Case management: list, status counts and the detail of a case being worked")
+figure("fig_upload.png", "Fig 4.6 Upload: result of scoring an 8-million-row file with accuracy against its labels")
 
 # ------------------------------------------------------------------ chapter 5
 chapter(5, "Conclusion")
@@ -614,6 +609,32 @@ for i, r in enumerate(refs, 1):
     para.paragraph_format.first_line_indent = Cm(-0.9)
     para.paragraph_format.space_after = Pt(6)
     para.add_run(f"{i}.\t{r}")
+
+def all_times_new_roman(document):
+    """Every style and the document defaults use Times New Roman; theme-font attributes would override it, so they are removed."""
+    styles_el = document.styles.element
+    for rfonts in styles_el.iter(qn("w:rFonts")):
+        for attr in ("w:asciiTheme", "w:hAnsiTheme", "w:eastAsiaTheme", "w:cstheme"):
+            if rfonts.get(qn(attr)) is not None:
+                del rfonts.attrib[qn(attr)]
+        for attr in ("w:ascii", "w:hAnsi", "w:eastAsia", "w:cs"):
+            rfonts.set(qn(attr), FONT)
+    defaults = styles_el.find(qn("w:docDefaults"))
+    if defaults is not None:
+        rpr_default = defaults.find(qn("w:rPrDefault"))
+        rpr = rpr_default.find(qn("w:rPr")) if rpr_default is not None else None
+        if rpr is not None and rpr.find(qn("w:rFonts")) is None:
+            rf = OxmlElement("w:rFonts")
+            for attr in ("w:ascii", "w:hAnsi", "w:eastAsia", "w:cs"):
+                rf.set(qn(attr), FONT)
+            rpr.insert(0, rf)
+    for style in document.styles:
+        if style.type == WD_STYLE_TYPE.PARAGRAPH or style.type == WD_STYLE_TYPE.CHARACTER:
+            if style.font is not None:
+                style.font.name = FONT
+
+
+all_times_new_roman(doc)
 
 # ask Word to refresh the index (page numbers) when the file is opened
 settings = doc.settings.element
