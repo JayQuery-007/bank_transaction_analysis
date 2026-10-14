@@ -93,7 +93,7 @@ def create_case(body: CaseCreate, owner: str = Depends(db.current_owner)):
     tx = search.fetch_transaction(body.tx_id, body.dataset, owner)  # 404 if the upload is not this owner's
     if tx is None:
         raise HTTPException(404, f"Transaction {body.tx_id} not found")
-    dataset_name = "PaySim"
+    dataset_name = "Main ledger"
     if body.dataset != "paysim":
         dataset_name = uploads._ensure_indexes().find_one({"_id": ObjectId(body.dataset), "owner": owner}, {"filename": 1})["filename"]
 

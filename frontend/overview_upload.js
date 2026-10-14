@@ -1,5 +1,5 @@
 // Overview tab for an uploaded dataset: numbers computed by the server with SQL over the scored file.
-// Shown instead of the PaySim overview while an upload is selected in the dataset picker.
+// Shown instead of the main ledger's overview while an upload is selected in the dataset picker.
 // Depends on helpers from app.js: $, apiAs, num, money, pct, esc, table, COLORS, and on datasets.js.
 
 (() => {
@@ -46,7 +46,7 @@
     // types
     const flaggedTypes = a.type_summary.filter((t) => t.flagged > 0).map((t) => t.type);
     const typeText = flaggedTypes.length
-      ? `The model flagged transactions only in <b>${flaggedTypes.join(" and ")}</b>. Other types are never scored, because the model was trained on TRANSFER and CASH_OUT, the only types that contain fraud in PaySim.`
+      ? `The model flagged transactions only in <b>${flaggedTypes.join(" and ")}</b>. Other types are never scored, because fraud only occurs in TRANSFER and CASH_OUT transactions, which is what the model was built for.`
       : "The model flagged no transactions in this file.";
 
     // hours: only hours with enough scored rows count towards the peak
@@ -78,7 +78,7 @@
             <tr><th>Actual fraud</th><td class="bad">${num(m.fn)}</td><td class="good">${num(m.tp)}</td></tr>
           </table>
         </div>
-        <p class="note">The model saw about 70% of the PaySim rows during training, so on rows taken from PaySim these numbers are optimistic.</p>
+        <p class="note">Accuracy is measured by comparing the model's verdicts with the <code>isFraud</code> column of your file.</p>
       </section>` : "";
 
     const receivers = a.top_flagged_receivers.length ? `
@@ -95,14 +95,14 @@
       <div class="dataset-banner">
         <span>Showing your upload <b>${esc(o.name)}</b>: ${num(o.rows)} rows, uploaded ${new Date(o.created_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })},
           scored in ${seconds(o.processing_ms)} and indexed in ${seconds(o.indexing_ms)}.</span>
-        <button type="button" id="upBackToPaysim">Show the PaySim analysis</button>
+        <button type="button" id="upBackToPaysim">Back to the main ledger</button>
       </div>
       <section>
         <h2>1. Dataset overview</h2>
         <div class="stats">${cards}</div>
         <p class="note">${num(ov.senders)} distinct sender accounts and ${num(ov.receivers)} distinct receiver accounts${ov.days ? `, over ${ov.days} days` : ""}.
           ${o.rows_invalid ? `${num(o.rows_invalid)} rows were skipped as invalid.` : "No rows were skipped."}
-          ${ov.transactions - ov.scored ? `${num(ov.transactions - ov.scored)} rows are of a type the model does not score.` : ""}</p>
+          ${ov.transactions - ov.scored ? `${num(ov.transactions - ov.scored)} rows are PAYMENT, CASH_IN or DEBIT and are not scored.` : ""}</p>
       </section>
       <section>
         <h2>2. Which transaction types are flagged?</h2>

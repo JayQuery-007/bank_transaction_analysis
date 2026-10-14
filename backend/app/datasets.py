@@ -9,7 +9,7 @@ router = APIRouter(prefix="/api/datasets", tags=["datasets"])
 @router.get("")
 def list_datasets(owner: str = Depends(db.current_owner)):
     paysim_rows = (search.status() or {}).get("rows")
-    items = [{"id": "paysim", "name": "PaySim (Kaggle)", "kind": "builtin", "rows": paysim_rows or 6362604,
+    items = [{"id": "paysim", "name": "Main ledger", "kind": "builtin", "rows": paysim_rows or 6362604,
               "labelled": True, "available": search.index_state() == "ready"}]
     for doc in uploads._ensure_indexes().find({"owner": owner, "status": "done"}).sort("created_at", -1):
         if uploads._db_path(str(doc["_id"])).exists():  # the searchable copy lives 24 hours

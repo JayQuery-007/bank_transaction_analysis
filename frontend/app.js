@@ -137,16 +137,16 @@ function renderOverview(o, quality) {
     .map(([label, value, cls]) => `<div class="stat ${cls || ""}"><div class="label">${label}</div><div class="value">${value}</div></div>`)
     .join("");
   $("qualityNote").textContent =
-    `Raw CSV: ${num(quality.total_rows)} rows, ${quality.rows_with_nulls} nulls, ${quality.duplicate_rows} duplicates. ` +
+    `Source file: ${num(quality.total_rows)} rows, ${quality.rows_with_nulls} empty values, ${quality.duplicate_rows} duplicates. ` +
     `${quality.zero_amounts} zero-amount rows were removed. ${num(o.origin_accounts)} distinct sender accounts and ` +
-    `${num(o.destination_accounts)} distinct receiver accounts. Ingested to Parquet in ${quality.seconds}s.`;
+    `${num(o.destination_accounts)} distinct receiver accounts.`;
 }
 
 function renderTypes(types, o) {
   const fraudTypes = types.filter((t) => t.fraud_transactions > 0).map((t) => t.type);
   $("typeFinding").innerHTML =
     `Fraud occurs <b>only in ${fraudTypes.join(" and ")}</b> transactions. The other types have no fraud at all, ` +
-    `so the model is trained on these two types only. The dataset's existing rule (<code>isFlaggedFraud</code>) ` +
+    `so the model is trained on these two types only. The bank's existing rule ` +
     `flagged just <b>${o.flagged_by_existing_rule}</b> of ${num(o.fraud_transactions)} frauds.`;
 
   table($("typeTable"), ["Type", "Transactions", "Avg amount", "Fraud", "Fraud rate"],
@@ -237,6 +237,8 @@ function renderMules(rows) {
     rows.slice(0, 10).map((r) => ({ cells: [esc(r.name_dest), r.fraud_transactions, num(r.total_amount, 2), r.first_step, r.last_step] })));
 }
 
+const MODEL_LABEL = { "Logistic Regression": "Baseline model", "Random Forest": "Fraud model (in use)", "Existing rule (isFlaggedFraud)": "Existing bank rule" };
+
 function renderModel(metrics, info, features, curve) {
   $("modelIntro").innerHTML =
     `Trained on ${num(info.training_rows)} TRANSFER/CASH_OUT transactions and evaluated on a held-out test set of ` +
@@ -247,7 +249,7 @@ function renderModel(metrics, info, features, curve) {
   table($("modelTable"), ["Model", "Precision", "Recall", "F1", "AUC-ROC", "AUC-PR", "Frauds caught", "False alarms", "Train time"],
     metrics.map((m) => ({
       cls: m.model === info.selected_model ? "highlight" : "",
-      cells: [m.model, f(m.precision), f(m.recall), f(m.f1), f(m.areaUnderROC), f(m.areaUnderPR),
+      cells: [MODEL_LABEL[m.model] || m.model, f(m.precision), f(m.recall), f(m.f1), f(m.areaUnderROC), f(m.areaUnderPR),
         `${num(m.tp)} / ${num(m.tp + m.fn)}`, num(m.fp), m.train_seconds ? `${m.train_seconds}s` : "&ndash;"],
     })));
 
@@ -344,13 +346,9 @@ $("predictForm").addEventListener("submit", async (e) => {
 async function main() {
   const names = ["overview", "data_quality", "type_summary", "hourly", "amount_bands", "balance_patterns",
     "repeat_fraud_destinations", "model_metrics", "model_info", "feature_importance", "threshold_curve"];
-  const [src, ...results] = await Promise.all([data.source(), ...names.map((n) => data.result(n))]);
+  const results = await Promise.all(names.map((n) => data.result(n)));
   const r = Object.fromEntries(names.map((n, i) => [n, results[i]]));
 
-  $("source").textContent = src;
-  $("serving").textContent = window.STATIC_SITE
-    ? "static site, Random Forest exported from Spark and run in the browser"
-    : "MongoDB + DuckDB + FastAPI";
   renderOverview(r.overview[0], r.data_quality[0]);
   renderTypes(r.type_summary, r.overview[0]);
   renderHourly(r.hourly);
@@ -364,5 +362,5 @@ async function main() {
 
 main().catch((err) => {
   document.querySelector("main").insertAdjacentHTML("afterbegin",
-    `<p class="result fraud">Could not load results: ${esc(err.message)}. Run the pipeline first (python run_pipeline.py).</p>`);
+    `<p class="result fraud">Could not load the results: ${esc(err.message)}. Please try again in a moment.</p>`);
 });

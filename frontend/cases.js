@@ -8,6 +8,7 @@
   const scope = () => (state.all ? "all" : datasets.current.id);
   let searchTimer = null;
 
+  const ledger = (name) => (!name || name === "PaySim" ? "Main ledger" : name);
   const badge = (s) => `<span class="badge s-${s}">${STATUS_LABEL[s]}</span>`;
   const prio = (p) => `<span class="prio ${p}">${p}</span>`;
   const time = (iso) => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
@@ -36,12 +37,14 @@
     table($("caseTable"), ["Case", "Dataset", "Transaction", "Accounts", "Score", "Status", "Priority", "Assignee", "Notes", "Updated"],
       res.items.map((c) => ({
         cls: "clickable" + (state.selected === c.id ? " selected" : ""),
-        cells: [c.id.slice(-6), esc(c.dataset_name || "PaySim"), `#${c.tx_id} ${c.tx.type} ${num(c.tx.amount)}`, `${esc(c.tx.name_orig)} → ${esc(c.tx.name_dest)}`,
+        cells: [c.id.slice(-6), esc(ledger(c.dataset_name)), `#${c.tx_id} ${c.tx.type} ${num(c.tx.amount)}`, `${esc(c.tx.name_orig)} → ${esc(c.tx.name_dest)}`,
           score(c.tx), badge(c.status), prio(c.priority), esc(c.assignee) || "–", c.notes.length, time(c.updated_at)],
       })));
     document.querySelectorAll("#caseTable tbody tr").forEach((tr, i) => (tr.dataset.i = i));
     if (!res.items.length) $("caseTable").insertAdjacentHTML("beforeend",
-      `<tbody><tr><td colspan="10" class="empty">No cases yet. Open one from the Explorer or enter a transaction id above.</td></tr></tbody>`);
+      `<tbody><tr><td colspan="10" class="empty">${state.status || $("caseQuery").value.trim()
+        ? "No cases match the current filters."
+        : "No cases yet. Open one from the Explorer or enter a transaction id above."}</td></tr></tbody>`);
     const page = Math.floor(skip / state.limit) + 1;
     $("casePager").hidden = res.total <= state.limit;
     $("casePageInfo").textContent = `Page ${page} of ${Math.max(1, Math.ceil(res.total / state.limit))}`;
@@ -68,7 +71,7 @@
       <div class="card" id="caseCard">
         <h3>Case ${c.id.slice(-6)} &middot; transaction #${c.tx_id} ${badge(c.status)}</h3>
         <dl class="kv">
-          <dt>Dataset</dt><dd>${esc(c.dataset_name || "PaySim")}</dd>
+          <dt>Dataset</dt><dd>${esc(ledger(c.dataset_name))}</dd>
           <dt>Transaction</dt><dd>${esc(tx.type)}, ${num(tx.amount, 2)} on day ${tx.day} at ${String(tx.hour_of_day).padStart(2, "0")}:00</dd>
           <dt>Sender</dt><dd>${esc(tx.name_orig)}: ${num(tx.old_balance_orig, 2)} → ${num(tx.new_balance_orig, 2)}</dd>
           <dt>Receiver</dt><dd>${esc(tx.name_dest)}: ${num(tx.old_balance_dest, 2)} → ${num(tx.new_balance_dest, 2)}</dd>

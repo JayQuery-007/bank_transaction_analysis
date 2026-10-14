@@ -1,10 +1,10 @@
-// Which dataset the Overview, Explorer and Cases tabs work on: PaySim, or one of your uploaded files.
+// Which dataset the Overview, Explorer and Cases tabs work on: the main ledger, or one of your uploaded files.
 // Server mode only. Other scripts listen for the "datasetchange" event on window.
 // Depends on helpers from app.js: $, api, apiAs, num, esc.
 
 const datasets = {
-  items: [{ id: "paysim", name: "PaySim (Kaggle)", kind: "builtin", rows: 6362604, labelled: true }],
-  current: { id: "paysim", name: "PaySim (Kaggle)", kind: "builtin", rows: 6362604, labelled: true },
+  items: [{ id: "paysim", name: "Main ledger", kind: "builtin", rows: 6362604, labelled: true }],
+  current: { id: "paysim", name: "Main ledger", kind: "builtin", rows: 6362604, labelled: true },
 
   isUpload() {
     return this.current.id !== "paysim";

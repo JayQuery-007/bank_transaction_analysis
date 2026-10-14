@@ -73,7 +73,7 @@ def test_the_dataset_list_has_paysim_and_only_your_uploads(client, owner, upload
     items = client.get("/api/datasets", headers=h(owner)).json()["items"]
     assert [i["id"] for i in items] == ["paysim", uploaded["id"]]
     mine = items[1]
-    assert mine["name"] == "sample.csv" and mine["rows"] == 500 and mine["labelled"] and mine["flagged"] == 30 and mine["kind"] == "upload"
+    assert mine["name"] == "sample.csv" and mine["rows"] == 500 and mine["labelled"] and mine["flagged"] == 40 and mine["kind"] == "upload"
     other = client.get("/api/datasets", headers=h(secrets.token_hex(16))).json()["items"]
     assert [i["id"] for i in other] == ["paysim"]
 
@@ -121,7 +121,7 @@ def test_sorting_by_model_score_keeps_unscored_rows_last(client, owner, uploaded
     desc = find(client, owner, uploaded, sort="fraud_probability", order="desc", limit=200)["items"]
     assert desc[0]["fraud_probability"] == pytest.approx(probs[0])
     scored = [i["fraud_probability"] for i in desc if i["fraud_probability"] is not None]
-    assert scored == sorted(scored, reverse=True) and len(scored) == len(desc)  # 430 scored rows fill the first 200
+    assert scored == sorted(scored, reverse=True) and len(scored) == len(desc)  # 239 scored rows fill the first 200
     asc = find(client, owner, uploaded, sort="fraud_probability", order="asc", limit=200, skip=300)["items"]
     assert any(i["fraud_probability"] is None for i in asc)  # unscored rows are at the end, not the start
     first_none = next(k for k, i in enumerate(asc) if i["fraud_probability"] is None)
@@ -147,20 +147,20 @@ def test_overview_numbers_match_independent_counts(client, owner, uploaded, uplo
     rows = scored_rows(upload_dir, uploaded)
     o = client.get(f"/api/datasets/{uploaded['id']}/overview", headers=h(owner)).json()
     a = o["analytics"]
-    assert o["name"] == "sample.csv" and o["rows"] == 500 and o["flagged"] == 30
+    assert o["name"] == "sample.csv" and o["rows"] == 500 and o["flagged"] == 40
     assert a["overview"]["transactions"] == 500
     assert a["overview"]["total_amount"] == pytest.approx(sum(float(r["amount"]) for r in rows), rel=1e-6)
-    assert a["overview"]["scored"] == 430 and a["overview"]["flagged"] == 30 and a["overview"]["labelled_fraud"] == 30
+    assert a["overview"]["scored"] == 239 and a["overview"]["flagged"] == 40 and a["overview"]["labelled_fraud"] == 40
     assert a["overview"]["senders"] == len({r["nameOrig"] for r in rows}) and a["overview"]["receivers"] == len({r["nameDest"] for r in rows})
     by_type = Counter(r["type"] for r in rows)
     assert {t["type"]: t["transactions"] for t in a["type_summary"]} == dict(by_type)
-    assert sum(t["flagged"] for t in a["type_summary"]) == 30 and sum(t["labelled_fraud"] for t in a["type_summary"]) == 30
+    assert sum(t["flagged"] for t in a["type_summary"]) == 40 and sum(t["labelled_fraud"] for t in a["type_summary"]) == 40
     assert sum(x["transactions"] for x in a["hourly"]) == 500 and {x["hour_of_day"] for x in a["hourly"]} == {int(r["hour_of_day"]) for r in rows}
     assert sum(x["transactions"] for x in a["amount_bands"]) == 500
-    assert sum(x["transactions"] for x in a["score_histogram"]) == 430 and sum(x["labelled_fraud"] for x in a["score_histogram"]) == 30
-    assert a["score_histogram"][-1]["bin"] == 9 and a["score_histogram"][-1]["transactions"] >= 30
+    assert sum(x["transactions"] for x in a["score_histogram"]) == 239 and sum(x["labelled_fraud"] for x in a["score_histogram"]) == 40
+    assert a["score_histogram"][-1]["bin"] == 9 and a["score_histogram"][-1]["transactions"] >= 20
     top = a["top_flagged_receivers"]
-    assert top == sorted(top, key=lambda r: -r["total_amount"]) and sum(r["flagged"] for r in top) <= 30
+    assert top == sorted(top, key=lambda r: -r["total_amount"]) and sum(r["flagged"] for r in top) <= 40
     assert o["metrics"]["recall"] == uploaded["metrics"]["recall"]
 
 
@@ -174,7 +174,7 @@ def test_open_a_case_from_an_uploaded_row(client, owner, uploaded):
     # one open case per row; PaySim's transaction with the same number is a different transaction
     assert client.post("/api/cases", json={"tx_id": row["tx_id"], "dataset": uploaded["id"]}, headers=h(owner)).status_code == 409
     other = client.post("/api/cases", json={"tx_id": row["tx_id"]}, headers=h(owner))
-    assert other.status_code == 201 and other.json()["dataset_name"] == "PaySim"
+    assert other.status_code == 201 and other.json()["dataset_name"] == "Main ledger"
     # nobody else can open cases on your upload
     assert client.post("/api/cases", json={"tx_id": row["tx_id"], "dataset": uploaded["id"]}, headers=h(secrets.token_hex(16))).status_code == 404
     assert client.post("/api/cases", json={"tx_id": 99_999, "dataset": uploaded["id"]}, headers=h(owner)).status_code == 404

@@ -16,7 +16,7 @@
   }
 
   // ---- sending ----
-  const sizeText = (bytes) => (bytes >= 1048576 ? `${(bytes / 1048576).toFixed(bytes >= 10485760 ? 0 : 1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
+  const sizeText = (bytes) => (bytes >= 1073741824 ? `${(bytes / 1073741824).toFixed(1).replace(/\.0$/, "")} GB` : bytes >= 1048576 ? `${(bytes / 1048576).toFixed(bytes >= 10485760 ? 0 : 1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
 
   async function send(file) {
     if (file.size > state.maxBytes) return status(`${esc(file.name)} is ${sizeText(file.size)}; the limit is ${sizeText(state.maxBytes)}.`, true);
@@ -63,9 +63,12 @@
     state.current = b;
     state.page = 0;
     const cards = [
-      ["Rows read", b.rows_total], ["Scored by the model", b.rows_scored], ["Flagged as fraud", b.flagged],
-      ["Not modelled", b.rows_not_modelled], ["Skipped (invalid)", b.rows_invalid],
-    ].map(([label, value], i) => `<div class="stat ${i === 2 ? "fraud" : ""}"><div class="label">${label}</div><div class="value">${num(value)}</div></div>`).join("");
+      ["Rows read", b.rows_total, "Every row in your file"],
+      ["Scored by the model", b.rows_scored, "TRANSFER and CASH_OUT rows"],
+      ["Flagged as fraud", b.flagged, "Scored above 0.5"],
+      ["Not scored", b.rows_not_modelled, "PAYMENT, CASH_IN and DEBIT rows. Fraud only occurs in transfers and cash-outs, so these are kept but not scored"],
+      ["Skipped (invalid)", b.rows_invalid, "Rows with a missing or impossible value, such as a negative amount or an unknown type"],
+    ].map(([label, value, hint], i) => `<div class="stat ${i === 2 ? "fraud" : ""}" title="${hint}"><div class="label">${label}</div><div class="value">${num(value)}</div><div class="hint">${hint}</div></div>`).join("");
 
     const m = b.metrics;
     const metrics = m ? `
@@ -92,7 +95,7 @@
       <ul class="errors">${b.errors.map((e) => `<li>Row ${e.row}: ${esc(e.message)}</li>`).join("")}</ul>
       ${b.rows_invalid > b.errors.length ? `<p class="note">${num(b.rows_invalid - b.errors.length)} more not shown.</p>` : ""}` : "";
     const ignored = b.ignored_columns.length ? `<p class="note">Ignored columns: ${b.ignored_columns.map(esc).join(", ")}.</p>` : "";
-    const notModelled = b.rows_not_modelled ? `<p class="note">${num(b.rows_not_modelled)} rows are of a type the model does not score (it was trained on TRANSFER and CASH_OUT only, the only types with fraud in the data).</p>` : "";
+    const notModelled = b.rows_not_modelled ? `<p class="note">${num(b.rows_not_modelled)} rows are PAYMENT, CASH_IN or DEBIT. They stay in the file and in search, but are not scored because fraud only occurs in transfers and cash-outs.</p>` : "";
 
     $("uploadResult").innerHTML = `
       <div class="card">

@@ -1,31 +1,21 @@
-"""Writes results/sample_upload.csv: a small, real, labelled sample in the dataset's own CSV format.
+"""Writes results/sample_upload.csv: a small labelled sample for the "Try the sample file" button.
 
-Rows are picked deterministically from the search index (ordered by a hash of tx_id): 30 frauds, 400 legitimate TRANSFER/CASH_OUT
-rows and 70 rows of other types (which the model does not score). The model saw about 70% of the
-dataset during training, so scores on this sample are optimistic; it exists to demo the upload.
-
-Run: python -m scripts.make_sample_upload
+Built with the synthetic generator (scripts/generate_dataset.py): 500 rows, about 40 of them fraud, so the
+demo shows flagged rows straight away. Run: python -m scripts.make_sample_upload
 """
-import duckdb
+import numpy as np
 
-from config import RESULTS_DIR, SEARCH_DB
+from config import RESULTS_DIR
+from scripts.generate_dataset import generate, write
 
 OUT = RESULTS_DIR / "sample_upload.csv"
+ROWS, FRAUD_ROWS = 500, 40
 
-con = duckdb.connect(str(SEARCH_DB), read_only=True)
-con.execute(f"""
-COPY (
-  SELECT step, type, amount, name_orig AS nameOrig, old_balance_orig AS oldbalanceOrg,
-         new_balance_orig AS newbalanceOrig, name_dest AS nameDest, old_balance_dest AS oldbalanceDest,
-         new_balance_dest AS newbalanceDest, is_fraud AS isFraud
-  FROM (
-    (SELECT * FROM transactions WHERE is_fraud = 1 AND type IN ('TRANSFER', 'CASH_OUT') ORDER BY hash(tx_id) LIMIT 30)
-    UNION ALL
-    (SELECT * FROM transactions WHERE is_fraud = 0 AND type IN ('TRANSFER', 'CASH_OUT') ORDER BY hash(tx_id) LIMIT 400)
-    UNION ALL
-    (SELECT * FROM transactions WHERE type IN ('PAYMENT', 'CASH_IN', 'DEBIT') ORDER BY hash(tx_id) LIMIT 70)
-  )
-  ORDER BY step, name_orig
-) TO '{OUT.as_posix()}' (HEADER, DELIMITER ',')
-""")
-print(f"wrote {OUT} ({OUT.stat().st_size / 1024:.0f} KB)")
+if __name__ == "__main__":
+    cols = generate(120_000, seed=2024, labels=True)
+    rng = np.random.default_rng(1)
+    fraud = np.flatnonzero(cols["fraud"] == 1)
+    legit = np.flatnonzero(cols["fraud"] == 0)
+    pick = np.sort(np.concatenate([rng.choice(fraud, FRAUD_ROWS, replace=False), rng.choice(legit, ROWS - FRAUD_ROWS, replace=False)]))
+    write({k: v[pick] for k, v in cols.items()}, str(OUT), labels=True)
+    print(f"wrote {OUT} ({ROWS} rows, {FRAUD_ROWS} fraud)")

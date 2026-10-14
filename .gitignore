@@ -27,5 +27,5 @@ site/
 data/search.duckdb*
 data/*.building*
 
-# large demo CSVs (scripts/make_big_samples.py)
+# large demo CSVs (scripts/generate_dataset.py)
 data/samples/

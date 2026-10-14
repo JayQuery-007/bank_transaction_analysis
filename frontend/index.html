@@ -12,11 +12,7 @@
 <header>
   <div class="wrap">
     <h1>Bank Transaction Analytics &amp; Fraud Detection</h1>
-    <p class="meta">
-      Dataset: <a href="https://www.kaggle.com/datasets/ealaxi/paysim1" target="_blank" rel="noopener">PaySim mobile money transactions (Kaggle)</a>
-      &middot; Pipeline: Spark SQL + Spark MLlib &middot; Serving: <span id="serving">MongoDB + FastAPI</span>
-      &middot; Data source: <span id="source">…</span>
-    </p>
+    <p class="meta">Monitor transactions, review what the fraud model flags, and work cases to resolution.</p>
   </div>
 </header>
 
@@ -26,7 +22,7 @@
   <button data-view="cases" data-server-only>Cases</button>
   <button data-view="upload" data-server-only>Upload</button>
   <label class="dataset-picker" data-server-only title="Overview, Explorer and Cases work on the dataset chosen here">
-    Dataset <select id="datasetSelect"><option value="paysim">PaySim (Kaggle)</option></select>
+    Dataset <select id="datasetSelect"><option value="paysim">Main ledger</option></select>
   </label>
 </nav>
 
@@ -78,12 +74,12 @@
   </section>
 
   <section>
-    <h2>5. Fraud detection model (Spark MLlib)</h2>
+    <h2>5. Fraud detection model</h2>
     <p id="modelIntro"></p>
     <table id="modelTable" class="data"></table>
     <div class="cols">
       <div>
-        <h3>Random Forest &ndash; confusion matrix (test set)</h3>
+        <h3>Fraud model: confusion matrix (test set)</h3>
         <table id="confusion" class="confusion"></table>
         <h3>Feature importance</h3>
         <div class="chart-box"><canvas id="featureChart"></canvas></div>
@@ -117,7 +113,7 @@
 
   <section>
     <h2>7. Check a transaction</h2>
-    <p class="sub" id="predictNote">Scores a single transaction with the trained Random Forest. Its 60 trees were trained in Spark MLlib and exported, so scoring is instant.</p>
+    <p class="sub" id="predictNote">Scores a single transaction with the fraud model. The result is instant.</p>
     <div class="examples">
       Fill with:
       <button type="button" data-example="fraud">a fraud from the test set</button>
@@ -219,7 +215,7 @@
 
   <section>
     <h2>Fraud cases</h2>
-    <p class="sub">Open a case from any transaction in the Explorer, move it through review, add notes, or delete it. Cases are stored in MongoDB and are private to this browser; cases left untouched for 7 days are removed automatically.</p>
+    <p class="sub">Open a case from any transaction in the Explorer, move it through review, add notes, or delete it. Cases are private to this browser; cases left untouched for 7 days are removed automatically.</p>
     <div id="casesBanner"></div>
     <p class="note" id="caseScope"></p>
     <div class="stats stats5" id="caseStats"></div>
@@ -253,7 +249,7 @@
 
   <section>
     <h2>Upload transactions</h2>
-    <p class="sub">Upload a CSV of transactions in the PaySim format and every row is scored by the fraud model. <span id="uploadLimits">Up to 5,000,000 rows or 500 MB</span>. Big files are processed in the background with a progress bar. Uploads are private to this browser, and the scored file is kept for 24 hours.</p>
+    <p class="sub">Upload a CSV of transactions and every row is scored by the fraud model. <span id="uploadLimits">Up to 5,000,000 rows or 500 MB</span>. Big files are processed in the background with a progress bar. Uploads are private to this browser, and the scored file is kept for 24 hours.</p>
     <div id="uploadBanner"></div>
     <div id="dropzone" class="dropzone" tabindex="0">
       <p><b>Drop a CSV file here</b> or
@@ -262,7 +258,7 @@
         and <code>step</code> (or <code>hour_of_day</code>). Add <code>isFraud</code> (0/1) to measure the model's accuracy on your file.</p>
       <p><button type="button" id="useSample" class="primary">Try the sample file (500 rows)</button>
         <a href="api/uploads/sample.csv" download>download the sample</a></p>
-      <p class="note">The sample rows come from the PaySim dataset, and the model saw about 70% of them during training, so its scores on this sample are optimistic.</p>
+      <p class="note">The sample is generated data with a higher share of fraud than a real feed, so flagged rows show up straight away.</p>
     </div>
     <div id="uploadStatus" class="search-status" hidden></div>
     <div id="uploadResult"></div>
@@ -277,7 +273,7 @@
 
 </main>
 
-<footer class="wrap">Big Data Analytics coursework &middot; Python, Apache Spark, MongoDB, Machine Learning</footer>
+<footer class="wrap">Bank Transaction Analytics</footer>
 
 <script src="config.js"></script>
 <script src="forest.js"></script>

@@ -38,7 +38,7 @@ RESULT_SETS = {
 @app.exception_handler(PyMongoError)
 async def mongo_unavailable(_request, exc):
     return JSONResponse(status_code=503, content={
-        "detail": "The database is not reachable. Start MongoDB (start.ps1 does it on Windows) or check MONGO_URI."})
+        "detail": "The database is not reachable right now. Please try again in a moment."})
 
 
 @app.get("/api/health")

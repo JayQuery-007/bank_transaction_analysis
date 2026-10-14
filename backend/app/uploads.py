@@ -33,8 +33,8 @@ from . import db, forest
 router = APIRouter(prefix="/api/uploads", tags=["uploads"])
 
 # Generous defaults for running locally; the Dockerfile sets small ones for the public deployment.
-MAX_BYTES = int(os.environ.get("UPLOAD_MAX_BYTES", 500 * 1024 * 1024))
-MAX_ROWS = int(os.environ.get("UPLOAD_MAX_ROWS", 5_000_000))
+MAX_BYTES = int(os.environ.get("UPLOAD_MAX_BYTES", 1024 * 1024 * 1024))
+MAX_ROWS = int(os.environ.get("UPLOAD_MAX_ROWS", 12_000_000))
 BLOCK_SIZE = 16 * 1024 * 1024  # bytes of CSV parsed at a time (~190,000 rows)
 MAX_BATCHES_PER_OWNER = 3
 MAX_ERRORS_SHOWN = 20

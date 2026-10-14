@@ -118,7 +118,7 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
       ? "not modelled (the model only covers TRANSFER and CASH_OUT)"
       : `${row.fraud_probability.toFixed(4)} &rarr; <b>${row.model_flag ? "flagged as fraud" : "looks legitimate"}</b>`;
     $("txDetail").innerHTML = `<div class="card"><h3>Transaction ${row.tx_id}</h3><dl class="kv">` +
-      kv("Time", row.step ? `${when(row)} (hour ${row.step} of the simulation)` : when(row)) +
+      kv("Time", row.step ? `${when(row)} (hour ${row.step} of the period)` : when(row)) +
       kv("Type / amount", `${row.type}, ${num(row.amount, 2)}`) +
       kv("Sender", `${acct(row.name_orig)}: ${num(row.old_balance_orig, 2)} → ${num(row.new_balance_orig, 2)}`) +
       kv("Receiver", `${acct(row.name_dest)}: ${num(row.old_balance_dest, 2)} → ${num(row.new_balance_dest, 2)}`) +
@@ -214,7 +214,6 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
 
   async function showBenchmark() {
     if (benchmarkShown) return;
-    benchmarkShown = true;
     let b;
     try {
       b = (await data.result("search_benchmark"))[0];
@@ -222,12 +221,19 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
       return;
     }
     if (!b) return;
+    benchmarkShown = true;
     $("benchIntro").textContent =
       `Task: ${b.query}, among ${num(b.rows_searched)} transactions. The same lookup for ${b.accounts_tested} random accounts, run four ways.`;
-    const engines = b.engines;
+    const LABEL = {
+      "Spark SQL": ["Distributed batch scan", "reads every stored record"],
+      "DuckDB on Parquet": ["Direct file scan", "reads the stored files, no table or index"],
+      "DuckDB table, index off": ["Table scan", "scans the transaction table, no index"],
+      "DuckDB table, ART index": ["Indexed lookup", "jumps straight to the account (what this search uses)"],
+    };
+    const engines = b.engines.map((e) => ({ ...e, indexed: e.name.includes("ART"), name: (LABEL[e.name] || [e.name])[0], method: (LABEL[e.name] || [0, e.method])[1] }));
     table($("benchTable"), ["Method", "Median", "95th percentile", "vs index"],
       engines.map((e) => ({
-        cls: e.name.includes("ART") ? "highlight" : "",
+        cls: e.indexed ? "highlight" : "",
         cells: [`${e.name}<br><span class="note">${e.method}</span>`, latency(e.median_ms), latency(e.p95_ms),
           e.slowdown_vs_index === 1 ? "–" : `${num(e.slowdown_vs_index, 0)}× slower`],
       })));
@@ -250,7 +256,7 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
         labels: engines.map((e) => e.name),
         datasets: [{
           data: engines.map((e) => e.median_ms),
-          backgroundColor: engines.map((e) => (e.name.includes("ART") ? COLORS.accent : COLORS.legit)),
+          backgroundColor: engines.map((e) => (e.indexed ? COLORS.accent : COLORS.legit)),
         }],
       },
       options: {
@@ -262,8 +268,7 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
     });
     const env = b.environment;
     $("benchNote").textContent =
-      `Measured ${env.generated_at} on ${env.os} (${env.cpu_threads} threads, DuckDB ${env.duckdb}). Times are server-side and exclude the network; ` +
-      `Spark's time excludes JVM start-up. Numbers differ between machines: rerun with python -m scripts.benchmark_search.`;
+      `Measured ${env.generated_at} on a ${env.cpu_threads}-thread server. Times are measured on the server and exclude the network, so they differ between machines.`;
   }
 
   const PAYSIM_INTRO = $("explorerIntro").innerHTML;
@@ -281,7 +286,9 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
   // Shows the controls that make sense for the selected dataset and clears the previous results.
   function applyDataset() {
     const up = datasets.isUpload();
+    form.querySelectorAll("input, select, button").forEach((el) => (el.disabled = false));
     document.querySelectorAll("#view-explorer [data-upload-only]").forEach((el) => (el.hidden = !up));
+    form.elements.fraud.closest("label").hidden = up && !datasets.current.labelled; // no labels, nothing to filter on
     $("examplesPaysim").hidden = up;
     $("examplesUpload").hidden = !up;
     document.querySelectorAll("#examplesUpload [data-needs-labels]").forEach((b) => (b.hidden = !datasets.current.labelled));
@@ -294,7 +301,10 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
     resetResults();
   }
 
-  window.addEventListener("datasetchange", applyDataset);
+  window.addEventListener("datasetchange", () => {
+    applyDataset();
+    if (!datasets.isUpload() && !$("view-explorer").hidden) openMainLedger();
+  });
 
   window.explorer.open = function (values) { // used by the Overview tab to jump to an account
     location.hash = "explorer";
@@ -304,10 +314,8 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
     run(0);
   };
 
-  views.explorer = {
-    async show() {
-      applyDataset();
-      if (datasets.isUpload()) return;
+  // the main ledger needs its search index; checks it and shows the speed comparison
+  async function openMainLedger() {
       try {
         const health = await api("/api/health");
         if (!health.search_index) throw health;
@@ -315,14 +323,18 @@ window.explorer = { onDetail: [] }; // other tabs (cases) add buttons to the det
       } catch (err) {
         const state = err && err.search_index_state;
         status(state === "downloading"
-          ? "The search index is still downloading on the server. Try again in a minute."
-          : state === "failed"
-            ? "The search index could not be downloaded. Check the server logs."
-            : "The search index has not been built yet. Run <code>python -m serving.build_search_index</code> and restart the server.", true);
+          ? "Search is still being prepared on the server. Try again in a minute."
+          : "Search is not available right now. Please try again later.", true);
         form.querySelectorAll("input, select, button").forEach((el) => (el.disabled = true));
         return;
       }
       showBenchmark();
+  }
+
+  views.explorer = {
+    async show() {
+      applyDataset();
+      if (!datasets.isUpload()) await openMainLedger();
     },
   };
 })();

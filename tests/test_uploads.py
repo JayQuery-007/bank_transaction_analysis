@@ -81,9 +81,9 @@ def test_sample_file_is_scored_and_summarised(client, owner):
     assert r.status_code == 201
     b = r.json()
     assert (b["rows_total"], b["rows_valid"], b["rows_invalid"]) == (500, 500, 0)
-    assert b["rows_scored"] == 430 and b["rows_not_modelled"] == 70  # TRANSFER and CASH_OUT only
+    assert b["rows_scored"] == 239 and b["rows_not_modelled"] == 261  # TRANSFER and CASH_OUT only
     assert b["metrics"]["recall"] > 0.9 and b["metrics"]["precision"] > 0.9
-    assert b["metrics"]["rows"] == 430 and sum(b["metrics"][k] for k in ("tp", "fp", "fn", "tn")) == 430
+    assert b["metrics"]["rows"] == 239 and sum(b["metrics"][k] for k in ("tp", "fp", "fn", "tn")) == 239
     probs = [x["fraud_probability"] for x in b["flagged_rows"]]
     assert probs == sorted(probs, reverse=True) and all(p > 0.5 for p in probs)
     assert b["flagged"] == len(b["flagged_rows"]) and "owner" not in b

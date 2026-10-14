@@ -1,6 +1,6 @@
 # Bank Transaction Analytics and Fraud Detection
 
-Big Data Analytics coursework project. A batch pipeline that processes **6.36 million
+A batch pipeline that processes **6.36 million
 mobile-money transactions** with Apache Spark, finds where and when fraud happens, and trains a
 fraud detection model with Spark MLlib. On top of the results sits a web application with
 **millisecond transaction search**, **fraud case management (full CRUD)** and **CSV upload with
@@ -140,7 +140,7 @@ architecture.
 
 ### Upload: score your own file
 
-Upload a CSV in the dataset's format. Locally the limits are 5 million rows or 500 MB; the
+Upload a CSV in the dataset's format. Locally the limits are 12 million rows or 1 GB; the
 Docker image sets 100,000 rows or 25 MB for the public deployment (`UPLOAD_MAX_ROWS`,
 `UPLOAD_MAX_BYTES`). The file is saved to disk and a background job streams it in 16 MB blocks:
 each block is validated and scored with vectorised Arrow/numpy code and appended to the output
@@ -150,21 +150,50 @@ real file row numbers and do not stop the upload. If the file has an `isFraud` c
 reports precision, recall and a confusion matrix. The scored CSV can be downloaded for 24 hours;
 formula-like text in account names is neutralised so it cannot run in a spreadsheet.
 
-Measured on a 16 GB Windows laptop, uploading real PaySim rows through the web page's API:
+Measured on a 16 GB Windows laptop, uploading the two generated demo files through the web page's API
+(one file at a time; the model had never seen either file):
 
-| File | Rows | Size | Time | Flagged | Precision / recall |
-|---|---|---|---|---|---|
-| `paysim_sample_1_1200000_rows.csv` | 1,200,000 | 90 MB | 7.4 s | 1,504 | 99.4% / 98.5% |
-| `paysim_sample_2_2000000_rows.csv` | 2,000,000 | 151 MB | 8.5 s | 1,356 | 98.8% / 99.6% |
-| `paysim_sample_3_3000000_rows.csv` | 3,003,305 | 226 MB | 12.5 s | 3,831 | 99.5% / 99.7% |
+| File | Rows | Size | Scoring | Search index | Flagged | Precision / recall |
+|---|---|---|---|---|---|---|
+| `transactions_with_labels_8M.csv` | 8,000,074 | 565 MB | about 30 s | about 42 s | 28,561 | 51.8% / 92.1% |
+| `transactions_without_labels_7M.csv` | 7,000,008 | 481 MB | about 35 s | about 38 s | 25,014 | not measurable (no labels) |
 
-Those times are for scoring. Right after scoring, a second phase builds a DuckDB search index
-for the file (13.8 s for the 3-million-row file, so about 25 s in total before it is explorable).
+Uploading both at once roughly doubles each time. Scoring happens first; a second phase then builds a DuckDB search index for the file, and only after that is the file
+explorable (about 70 s in total for the 8-million-row file).
+
+### Demo data: two generated files (`scripts/generate_dataset.py`)
+
+Real bank transactions are confidential, so the demo uploads are synthetic. The generator is seeded
+(same seed, same file) and vectorised: 8 million rows take about 12 seconds.
+
+```bash
+python -m scripts.generate_dataset --rows 8000000 --labels --seed 7 --out data/samples/transactions_with_labels_8M.csv
+python -m scripts.generate_dataset --rows 7000000 --seed 11 --out data/samples/transactions_without_labels_7M.csv
+```
+
+How the data is made:
+
+1. **Genuine traffic.** Each row draws a transaction type from a fixed mix (CASH_OUT 35%, PAYMENT 34%,
+   CASH_IN 22%, TRANSFER 8.4%, DEBIT 0.6%), an hour from a daily activity curve (quiet overnight) and an
+   amount from a log-normal distribution per type. Accounts come from fixed pools of customers and
+   merchants, a few receivers are far more popular than the rest, and balances stay consistent
+   (balance after = balance before minus or plus the amount). About 0.4% of genuine transfers and
+   cash-outs empty the sender's account on purpose, so there are look-alikes that are not fraud.
+2. **Fraud events** (about 0.2% of rows). Account takeover: a victim's whole balance is moved to a mule
+   account and cashed out within the hour. 20% are a direct cash-out, 15% take only part of the balance,
+   and mule accounts are reused.
+3. **Output.** Rows are ordered by time. With `--labels` the file has an `isFraud` column; without it the
+   column is left out, like a feed that has no verdicts yet. The columns follow the PaySim layout.
+
+Only the shape of the data (type mix, orders of magnitude) is borrowed from PaySim; no PaySim row is copied.
+The built-in 500-row sample (`results/sample_upload.csv`, `python -m scripts.make_sample_upload`) comes from the
+same generator. Because the model was trained on PaySim and these files are generated separately, the accuracy
+shown on them is a fair test on unseen data, not a training-set number.
 
 ### Datasets: explore, analyse and open cases on your upload
 
 The dataset picker at the top of the page chooses what the Overview, Explorer and Cases tabs work
-on: the PaySim data or any of your finished uploads. A finished upload is selected automatically.
+on: the main ledger (the 6.36 million PaySim transactions) or any of your finished uploads. A finished upload is selected automatically.
 Each upload gets its own search index (`/api/search?dataset=<id>`), its own overview computed with
 SQL (`GET /api/datasets/{id}/overview`: type table, flag rate by hour, amount bands, score
 histogram, accuracy if the file has `isFraud`, top flagged receivers), and cases can be opened from
@@ -172,12 +201,9 @@ its rows (the "transaction id" of an upload is the row number). Cases remember t
 Cases tab shows the selected dataset's cases, or all of them with the "all datasets" tick.
 Uploads, their indexes and their cases expire like before (uploads after 24 hours).
 
-That is about 260,000 rows per second, and the server's memory peaked at 534 MB (154 MB idle)
-for all three. Scoring itself is fast because rows are scored in 25,000-row blocks on several
-threads: 426,000 rows/s, against 38,000 rows/s when the same rows are scored as one big array.
-Create the three files with `python -m scripts.make_big_samples` (they land in `data/samples/`,
-not in Git). A 500-row labelled sample is built in (`results/sample_upload.csv`). The model
-saw about 70% of these rows during training, so its scores on them are optimistic.
+The file is processed in a stream, so memory does not grow with the file size. Scoring itself is fast because rows are
+scored in 25,000-row blocks on several threads: 426,000 rows/s, against 38,000 rows/s when the same rows are scored as
+one big array.
 
 Scoring in the application uses the Random Forest exported from Spark's model files and
 evaluated with numpy (`backend/app/forest.py`), not Spark itself. It gives the same
@@ -350,8 +376,9 @@ serving/
   fetch_index.py          downloads the index from a Hugging Face dataset repo (hosted container)
 scripts/
   benchmark_search.py     times one lookup four ways -> results/search_benchmark.json
-  make_sample_upload.py   builds results/sample_upload.csv (500 rows)
-  make_big_samples.py     builds three CSVs of 1.2M, 2M and 3M real rows in data/samples/
+  generate_dataset.py     synthetic transaction file of any size, with or without isFraud
+  make_sample_upload.py   builds results/sample_upload.csv (500 rows) with the generator
+  show_db.py              prints what is stored in MongoDB, the search index and the data lake
 notebooks/eda.ipynb       exploratory analysis
 backend/app/
   main.py                 routes for results, scoring, health
