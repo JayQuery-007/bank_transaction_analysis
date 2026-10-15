@@ -354,17 +354,17 @@ P("Banks and mobile-money providers process millions of transactions every day: 
 P("This project, Bank Transaction Analytics and Fraud Detection, addresses the problem with a complete big-data system. A batch pipeline processes the full dataset of 6.36 million "
   "transactions with Apache Spark, discovers where, when and how fraud occurs, and trains a machine-learning model that scores every transaction with a fraud probability. On top of the results sits "
   "a web application on which an analyst can see the findings, look up any account in milliseconds, open and manage investigation cases, and upload their own transaction files to have every row checked by the model.")
-P("The data used is PaySim, a public benchmark of simulated mobile-money transactions generated from the logs of a real service and containing a ground-truth fraud label. In it, fraud follows a clear "
+P("The data used is PaySim [1], a public benchmark of simulated mobile-money transactions generated from the logs of a real service and containing a ground-truth fraud label. In it, fraud follows a clear "
   "pattern, account takeover followed by cash-out: the money of a victim is transferred to a mule account and then withdrawn as cash. The system exploits the balance behaviour that this leaves behind, "
   "such as the sender's account being emptied and the receiver's recorded balance not changing although money arrived.")
 
 section("1.2 Motivation")
 P("The motivation for this project comes from three observations. First, fraud datasets are a textbook example of class imbalance. With one fraud in 776 transactions, accuracy is a meaningless measure, "
-  "and an analyst needs a model that is judged by precision (how many alerts are real) and recall (how many frauds are found). Second, the data is large enough that the way it is stored and queried "
-  "matters: a full scan of 6.36 million rows with a distributed engine takes more than a second, which is too slow for an interactive search, while an index brings the same lookup down to a few milliseconds.")
+  "and an analyst needs a model that is judged by precision (how many alerts are real) and recall (how many frauds are found) [2]. Second, the data is large enough that the way it is stored and queried "
+  "matters: a full scan of 6.36 million rows with a distributed engine [3] takes more than a second, which is too slow for an interactive search, while an index brings the same lookup down to a few milliseconds.")
 P("Third, a model on its own does not help an analyst. In practice, flagged transactions must be searched, reviewed, discussed and closed. This needs an application with a case workflow, "
   "and with the ability to score new batches of transactions that arrive as files. The project was therefore designed to cover the whole path from raw data to an investigated case, using "
-  "technologies from the big-data ecosystem: Spark for batch processing and learning, Parquet for storage, a document database for operational data, and an embedded analytical database for fast lookups.")
+  "technologies from the big-data ecosystem: Spark for batch processing [3] and learning [4], Parquet for storage, a document database for operational data, and an embedded analytical database for fast lookups.")
 
 section("1.3 Problem Statement")
 P("Existing approaches to transaction fraud either rely on fixed rules that catch very few frauds, or are built as single-machine notebooks that cannot handle millions of rows, report accuracy "
@@ -391,31 +391,32 @@ numbered([
 chapter(2, "Literature Survey")
 section("2.1 Survey of Existing Systems")
 P("A range of existing approaches address transaction fraud and big-data processing, but each has limitations with respect to the objectives of this project.")
-P("**Rule-based fraud engines:** Banks traditionally flag transactions with fixed rules, for example \"flag any transfer above a threshold\". In the PaySim data, the provider's rule (isFlaggedFraud) "
+P("**Rule-based fraud engines:** Banks traditionally flag transactions with fixed rules, for example \"flag any transfer above a threshold\". In the PaySim data [1], the provider's rule (isFlaggedFraud) "
   "flags only 16 of 8,197 fraudulent transactions, a recall of 0.2%. Rules are easy to explain but are quickly evaded and cannot learn the balance behaviour that characterises fraud.")
 P("**Enterprise fraud platforms:** Commercial fraud-management products offer real-time scoring and case tools. They are proprietary, expensive and closed, so they cannot be used for academic work, "
   "and their internals cannot be inspected or reproduced.")
 P("**Single-machine notebooks:** Many public solutions to fraud datasets use a notebook with pandas and scikit-learn. This is adequate for a few hundred thousand rows, but loads all data into one "
-  "process's memory, reports accuracy on a rare class, and offers no search, case workflow or upload. The widely used credit-card fraud dataset from the Machine Learning Group of ULB, for instance, "
+  "process's memory, reports accuracy on a rare class, and offers no search, case workflow or upload. The widely used credit-card fraud dataset from the Machine Learning Group of ULB [5], for instance, "
   "has 284,807 transactions of which 492 are fraudulent, which is small enough to hide scalability problems.")
-P("**Distributed engines used for lookups:** A distributed batch engine such as Spark is excellent for processing and learning, but when it is used to answer an individual lookup it rescans the data. "
-  "In our measurement, finding the transactions of one account among 6.36 million rows with Spark took a median of 1,441 ms, against 2.5 ms with an index.")
-P("**Class-imbalance techniques:** Oversampling methods such as SMOTE create synthetic minority examples, and undersampling discards majority examples. They are useful but change the data distribution; "
-  "this project instead uses class weights for the baseline model, deep trees for the forest, and evaluation with precision, recall and the precision-recall curve, which is recommended for imbalanced problems.")
-P("**Public simulated datasets:** Real transactions are confidential. PaySim is a simulator calibrated on aggregated logs of a real mobile-money service, which provides a labelled benchmark of "
+P("**Distributed engines used for lookups:** A distributed batch engine such as Spark [3] is excellent for processing and learning, but when it is used to answer an individual lookup it rescans the data. "
+  "In our measurement, finding the transactions of one account among 6.36 million rows with Spark took a median of 1,441 ms, against 2.5 ms with an index. "
+  "An embeddable analytical database such as DuckDB [6] with an adaptive radix tree index [7] answers the same lookup in milliseconds.")
+P("**Class-imbalance techniques:** Oversampling methods such as SMOTE [8] create synthetic minority examples, and undersampling discards majority examples. They are useful but change the data distribution; "
+  "this project instead uses class weights for the baseline model, deep trees for the Random Forest [9], and evaluation with precision, recall and the precision-recall curve, which is recommended for imbalanced problems [2].")
+P("**Public simulated datasets:** Real transactions are confidential. PaySim [1] is a simulator calibrated on aggregated logs of a real mobile-money service, which provides a labelled benchmark of "
   "6.36 million transactions. It has become a common dataset for fraud research, with the limitation that its fraud follows a simplified pattern.")
 
 section("2.2 Findings from Literature Survey")
-table(["No.", "Title", "Authors", "Technology / Algorithm Used", "Results / Remarks"], [
-    ["1", "Random Forests", "Breiman, 2001", "Ensemble of decision trees, bagging", "Showed that averaging many randomised trees gives accurate, robust classifiers; forms the core of the proposed fraud model."],
-    ["2", "Apache Spark: A Unified Engine for Big Data Processing", "Zaharia et al., 2016", "Apache Spark, DataFrames, SQL", "Describes parallel in-memory processing of large datasets with a SQL optimiser; basis of the ingestion and analytics pipeline."],
-    ["3", "MLlib: Machine Learning in Apache Spark", "Meng et al., 2016", "Distributed machine learning, pipelines", "Provides scalable Random Forest and Logistic Regression with pipelines; used to train and evaluate the models."],
-    ["4", "PaySim: A Financial Mobile Money Simulator for Fraud Detection", "Lopez-Rojas, Elmir and Axelsson, 2016", "Agent-based simulation", "Source of the 6.36 million-row labelled dataset; fraud appears only in transfer and cash-out transactions."],
-    ["5", "SMOTE: Synthetic Minority Over-sampling Technique", "Chawla et al., 2002", "Oversampling", "Addresses class imbalance by creating minority examples; motivates the project's choice of weights and suitable metrics instead."],
-    ["6", "The Precision-Recall Plot Is More Informative than the ROC Plot on Imbalanced Datasets", "Saito and Rehmsmeier, 2015", "Evaluation metrics", "Justifies reporting precision, recall and area under the precision-recall curve for rare-class problems."],
-    ["7", "DuckDB: an Embeddable Analytical Database", "Raasveldt and Muhleisen, 2019", "Columnar vectorised engine", "An in-process analytical database that reads Parquet directly; used for the search index."],
-    ["8", "The Adaptive Radix Tree: ARTful Indexing for Main-Memory Databases", "Leis, Kemper and Neumann, 2013", "ART index", "A tree index supporting exact and prefix lookups; the index type behind the millisecond account search and suggestions."],
-], widths=[1.1, 3.9, 2.7, 3.1, 5.2], size=10)
+table(["No.", "Title", "Ref.", "Technology / Algorithm Used", "Results / Remarks"], [
+    ["1", "PaySim: A Financial Mobile Money Simulator for Fraud Detection", "[1]", "Agent-based simulation", "Source of the 6.36 million-row labelled dataset; fraud appears only in transfer and cash-out transactions."],
+    ["2", "The Precision-Recall Plot Is More Informative than the ROC Plot on Imbalanced Datasets", "[2]", "Evaluation metrics", "Justifies reporting precision, recall and area under the precision-recall curve for rare-class problems."],
+    ["3", "Apache Spark: A Unified Engine for Big Data Processing", "[3]", "Apache Spark, DataFrames, SQL", "Describes parallel in-memory processing of large datasets with a SQL optimiser; basis of the ingestion and analytics pipeline."],
+    ["4", "MLlib: Machine Learning in Apache Spark", "[4]", "Distributed machine learning, pipelines", "Provides scalable Random Forest and Logistic Regression with pipelines; used to train and evaluate the models."],
+    ["5", "DuckDB: an Embeddable Analytical Database", "[6]", "Columnar vectorised engine", "An in-process analytical database that reads Parquet directly; used for the search index."],
+    ["6", "The Adaptive Radix Tree: ARTful Indexing for Main-Memory Databases", "[7]", "ART index", "A tree index supporting exact and prefix lookups; the index type behind the millisecond account search and suggestions."],
+    ["7", "SMOTE: Synthetic Minority Over-sampling Technique", "[8]", "Oversampling", "Addresses class imbalance by creating minority examples; motivates the project's choice of weights and suitable metrics instead."],
+    ["8", "Random Forests", "[9]", "Ensemble of decision trees, bagging", "Showed that averaging many randomised trees gives accurate, robust classifiers; forms the core of the proposed fraud model."],
+], widths=[1.1, 4.7, 1.3, 3.1, 5.8], size=10)
 
 # ------------------------------------------------------------------ chapter 3
 chapter(3, "Proposed System")
@@ -442,7 +443,7 @@ P("The application is deliberately split so that the heavy work is done once, of
 figure("fig_architecture.png", "Fig 3.1 Architecture of the system: data sources, ingestion paths, shared stores, API and interface", width_cm=15.5)
 
 section("3.3 The Dataset")
-P("**Main dataset (PaySim).** The main dataset is PaySim, published on Kaggle. It contains 6,362,604 simulated mobile-money transactions over 31 days (744 hourly steps). It is labelled: each "
+P("**Main dataset (PaySim).** The main dataset is PaySim [1], published on Kaggle. It contains 6,362,604 simulated mobile-money transactions over 31 days (744 hourly steps). It is labelled: each "
   "row carries an isFraud flag, and the dataset also contains a simple built-in rule flag. The raw file (471 MB) is cleaned and converted into a 304 MB Parquet data lake partitioned by transaction type. "
   "No values are missing and there are no duplicate rows; 16 rows with an amount of zero were removed during ingestion.")
 table(["Column", "Meaning"], [
@@ -480,12 +481,12 @@ P("**Features and models.** Only TRANSFER and CASH_OUT transactions (2.77 millio
 P("**Serving the model.** After training, the 60 trees are read from the files saved by Spark and evaluated with NumPy. Rows are scored in blocks of 25,000 on several threads, which reaches about "
   "426,000 rows per second. A test confirms that the scores equal Spark's on all 2,424 stored test transactions, with a maximum difference of 0.00005.")
 table(["Layer", "Technology", "Purpose"], [
-    ["Batch processing", "Apache Spark (PySpark, Spark SQL)", "Ingestion, cleaning and seven analyses over 6.36 million rows"],
-    ["Machine learning", "Spark MLlib", "Training and evaluation of Logistic Regression and Random Forest"],
-    ["Storage", "Parquet files", "Compressed columnar data lake, partitioned by type"],
-    ["Search index", "DuckDB with ART indexes", "Millisecond lookup and prefix suggestions on account ids"],
-    ["Operational database", "MongoDB", "Analysis results, fraud cases (with notes and history) and upload records"],
-    ["API", "FastAPI, Pydantic", "REST endpoints with input validation and generated documentation"],
+    ["Batch processing", "Apache Spark (PySpark, Spark SQL) [10]", "Ingestion, cleaning and seven analyses over 6.36 million rows"],
+    ["Machine learning", "Spark MLlib [4]", "Training and evaluation of Logistic Regression and Random Forest"],
+    ["Storage", "Parquet files [11]", "Compressed columnar data lake, partitioned by type"],
+    ["Search index", "DuckDB with ART indexes [12], [7]", "Millisecond lookup and prefix suggestions on account ids"],
+    ["Operational database", "MongoDB [13]", "Analysis results, fraud cases (with notes and history) and upload records"],
+    ["API", "FastAPI, Pydantic [14]", "REST endpoints with input validation and generated documentation"],
     ["Scoring and upload", "NumPy, PyArrow", "Model scoring outside Spark; streaming CSV validation and scoring"],
     ["Interface", "HTML, CSS, JavaScript, Chart.js", "Overview, Explorer, Cases and Upload screens"],
     ["Quality", "pytest", "144 automated tests"],
@@ -588,27 +589,28 @@ new_page()
 EST["found"]["References"] = EST["page"]
 P("References", bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, size=14, after=12)
 refs = [
-    "L. Breiman, \"Random Forests,\" Machine Learning, vol. 45, no. 1, pp. 5-32, 2001.",
+    "E. A. Lopez-Rojas, A. Elmir and S. Axelsson, \"PaySim: A financial mobile money simulator for fraud detection,\" in Proc. 28th European Modeling and Simulation Symposium (EMSS), 2016. [Online]. Available: https://www.kaggle.com/datasets/ealaxi/paysim1",
+    "T. Saito and M. Rehmsmeier, \"The Precision-Recall Plot Is More Informative than the ROC Plot When Evaluating Binary Classifiers on Imbalanced Datasets,\" PLoS ONE, vol. 10, no. 3, p. e0118432, 2015.",
     "M. Zaharia et al., \"Apache Spark: A Unified Engine for Big Data Processing,\" Communications of the ACM, vol. 59, no. 11, pp. 56-65, 2016.",
     "X. Meng et al., \"MLlib: Machine Learning in Apache Spark,\" Journal of Machine Learning Research, vol. 17, no. 34, pp. 1-7, 2016.",
-    "E. A. Lopez-Rojas, A. Elmir and S. Axelsson, \"PaySim: A financial mobile money simulator for fraud detection,\" in Proc. 28th European Modeling and Simulation Symposium (EMSS), 2016. Dataset available at: https://www.kaggle.com/datasets/ealaxi/paysim1",
-    "N. V. Chawla, K. W. Bowyer, L. O. Hall and W. P. Kegelmeyer, \"SMOTE: Synthetic Minority Over-sampling Technique,\" Journal of Artificial Intelligence Research, vol. 16, pp. 321-357, 2002.",
-    "T. Saito and M. Rehmsmeier, \"The Precision-Recall Plot Is More Informative than the ROC Plot When Evaluating Binary Classifiers on Imbalanced Datasets,\" PLoS ONE, vol. 10, no. 3, 2015.",
-    "M. Raasveldt and H. Muhleisen, \"DuckDB: an Embeddable Analytical Database,\" in Proc. ACM SIGMOD International Conference on Management of Data, 2019.",
+    "Machine Learning Group, Universite Libre de Bruxelles, \"Credit Card Fraud Detection,\" Kaggle dataset. [Online]. Available: https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud",
+    "M. Raasveldt and H. Muhleisen, \"DuckDB: an Embeddable Analytical Database,\" in Proc. ACM SIGMOD International Conference on Management of Data, 2019, pp. 1981-1984.",
     "V. Leis, A. Kemper and T. Neumann, \"The Adaptive Radix Tree: ARTful Indexing for Main-Memory Databases,\" in Proc. IEEE 29th International Conference on Data Engineering (ICDE), 2013.",
-    "Apache Spark Documentation, Spark SQL and MLlib guides. Available at: https://spark.apache.org/docs/latest/",
-    "Apache Parquet Documentation. Available at: https://parquet.apache.org/docs/",
-    "MongoDB Documentation, Indexes: TTL and partial indexes. Available at: https://www.mongodb.com/docs/manual/indexes/",
-    "FastAPI Documentation. Available at: https://fastapi.tiangolo.com/",
-    "DuckDB Documentation. Available at: https://duckdb.org/docs/",
+    "N. V. Chawla, K. W. Bowyer, L. O. Hall and W. P. Kegelmeyer, \"SMOTE: Synthetic Minority Over-sampling Technique,\" Journal of Artificial Intelligence Research, vol. 16, pp. 321-357, 2002.",
+    "L. Breiman, \"Random Forests,\" Machine Learning, vol. 45, no. 1, pp. 5-32, 2001.",
+    "Apache Software Foundation, \"Apache Spark Documentation: Spark SQL and MLlib guides.\" [Online]. Available: https://spark.apache.org/docs/latest/",
+    "Apache Software Foundation, \"Apache Parquet Documentation.\" [Online]. Available: https://parquet.apache.org/docs/",
+    "DuckDB Foundation, \"DuckDB Documentation.\" [Online]. Available: https://duckdb.org/docs/",
+    "MongoDB, Inc., \"MongoDB Manual: Indexes (TTL and partial indexes).\" [Online]. Available: https://www.mongodb.com/docs/manual/indexes/",
+    "S. Ramirez, \"FastAPI Documentation.\" [Online]. Available: https://fastapi.tiangolo.com/",
 ]
 for i, r in enumerate(refs, 1):
     para = doc.add_paragraph()
     para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    para.paragraph_format.left_indent = Cm(0.9)
-    para.paragraph_format.first_line_indent = Cm(-0.9)
+    para.paragraph_format.left_indent = Cm(1.1)
+    para.paragraph_format.first_line_indent = Cm(-1.1)
     para.paragraph_format.space_after = Pt(6)
-    para.add_run(f"{i}.\t{r}")
+    para.add_run(f"[{i}]\t{r}")
 
 def all_times_new_roman(document):
     """Every style and the document defaults use Times New Roman; theme-font attributes would override it, so they are removed."""
